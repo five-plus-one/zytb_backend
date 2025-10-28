@@ -1,0 +1,37 @@
+import { Router } from 'express';
+import userRoutes from './user.routes';
+import collegeRoutes from './college.routes';
+import majorRoutes from './major.routes';
+import volunteerRoutes from './volunteer.routes';
+import systemRoutes from './system.routes';
+import enrollmentPlanRoutes from './enrollmentPlan.routes';
+import admissionScoreRoutes from './admissionScore.routes';
+import scoreRankingRoutes from './scoreRanking.routes';
+import agentRoutes from './agent.routes';
+import diagnosticRoutes from './diagnostic.routes';
+import toolsRoutes from './tools.routes';
+
+const router = Router();
+
+// 挂载各模块路由
+router.use('/user', userRoutes);
+router.use('/college', collegeRoutes);
+router.use('/major', majorRoutes);
+router.use('/volunteer', volunteerRoutes);
+router.use('/system', systemRoutes);
+router.use('/enrollment-plan', enrollmentPlanRoutes);
+router.use('/admission-score', admissionScoreRoutes);
+router.use('/score-ranking', scoreRankingRoutes);
+router.use('/agent', agentRoutes);
+router.use('/agent/tools', toolsRoutes); // AI 工具路由
+router.use('/diagnostic', diagnosticRoutes);
+
+// 健康检查接口
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
+
+export default router;

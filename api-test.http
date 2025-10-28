@@ -1,0 +1,1144 @@
+###############################################################################
+# 志愿填报系统 API 测试文件
+# 使用方法: 安装 VS Code 的 REST Client 插件后，点击 "Send Request" 即可测试
+# 文档: https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+###############################################################################
+
+# ============================================================================
+# 环境变量配置
+# ============================================================================
+@baseUrl = http://localhost:11452/api
+@contentType = application/json; charset=utf-8
+
+# 需要在登录后手动更新此token
+@token =
+
+# 测试用户信息
+@testUsername = testuser001
+@testPassword = 123456
+@testPhone = 13800138001
+@testNickname = 测试用户
+
+# 测试用的ID (需要根据实际数据更新)
+@collegeId =
+@majorId =
+@volunteerId =
+
+
+###############################################################################
+# 1. 健康检查
+###############################################################################
+
+### 1.1 健康检查
+GET {{baseUrl}}/health
+Content-Type: {{contentType}}
+
+
+###############################################################################
+# 2. 用户模块 API
+###############################################################################
+
+### 2.1 发送注册验证码
+POST {{baseUrl}}/user/verify-code
+Content-Type: {{contentType}}
+
+{
+  "phone": "{{testPhone}}",
+  "type": "register"
+}
+
+### 2.2 用户注册
+POST {{baseUrl}}/user/register
+Content-Type: {{contentType}}
+
+{
+  "username": "{{testUsername}}",
+  "password": "{{testPassword}}",
+  "nickname": "{{testNickname}}",
+  "phone": "{{testPhone}}",
+  "email": "test@example.com"
+}
+
+### 2.3 用户登录
+# @name login
+POST {{baseUrl}}/user/login
+Content-Type: {{contentType}}
+
+{
+  "username": "{{testUsername}}",
+  "password": "{{testPassword}}"
+}
+
+### 2.4 获取用户信息
+GET {{baseUrl}}/user/info
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 2.5 更新用户信息
+PUT {{baseUrl}}/user/info
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "nickname": "张三同学",
+  "email": "zhangsan@example.com",
+  "realName": "张三",
+  "province": "浙江省",
+  "city": "杭州市",
+  "school": "杭州第一中学",
+  "examScore": 650,
+  "subjectType": "physics"
+}
+
+### 2.6 修改密码
+PUT {{baseUrl}}/user/password
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "oldPassword": "{{testPassword}}",
+  "newPassword": "654321"
+}
+
+### 2.7 发送登录验证码
+POST {{baseUrl}}/user/verify-code
+Content-Type: {{contentType}}
+
+{
+  "phone": "{{testPhone}}",
+  "type": "login"
+}
+
+
+###############################################################################
+# 3. 院校模块 API
+###############################################################################
+
+### 3.1 获取院校列表 - 基础查询
+GET {{baseUrl}}/college/list?pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 3.2 获取院校列表 - 高级筛选
+GET {{baseUrl}}/college/list?pageNum=1&pageSize=10&keyword=北京&province=北京市&type=综合类&level=985&minScore=600&maxScore=700&sortField=rank&sortOrder=ASC
+Content-Type: {{contentType}}
+
+### 3.3 获取院校列表 - 搜索关键词
+GET {{baseUrl}}/college/list?keyword=清华&pageNum=1&pageSize=5
+Content-Type: {{contentType}}
+
+### 3.4 获取院校列表 - 按分数筛选
+GET {{baseUrl}}/college/list?minScore=650&maxScore=680&pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 3.5 获取院校列表 - 985院校
+GET {{baseUrl}}/college/list?level=985&sortField=rank&sortOrder=ASC&pageNum=1&pageSize=20
+Content-Type: {{contentType}}
+
+### 3.6 获取院校详情
+# 注意: 需要先从院校列表获取真实的院校ID，然后更新 @collegeId 变量
+GET {{baseUrl}}/college/{{collegeId}}
+Content-Type: {{contentType}}
+
+### 3.7 获取院校招生计划
+GET {{baseUrl}}/college/{{collegeId}}/plan?year=2024&province=浙江省
+Content-Type: {{contentType}}
+
+### 3.8 获取院校历年分数线
+GET {{baseUrl}}/college/{{collegeId}}/scores?province=浙江省&subjectType=physics&years=3
+Content-Type: {{contentType}}
+
+### 3.9 对比多个院校
+POST {{baseUrl}}/college/compare
+Content-Type: {{contentType}}
+
+{
+  "collegeIds": [
+    "{{collegeId}}"
+  ]
+}
+
+
+###############################################################################
+# 4. 专业模块 API
+###############################################################################
+
+### 4.1 获取专业列表 - 基础查询
+GET {{baseUrl}}/major/list?pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 4.2 获取专业列表 - 搜索计算机类专业
+GET {{baseUrl}}/major/list?keyword=计算机&pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 4.3 获取专业列表 - 工学类专业
+GET {{baseUrl}}/major/list?category=工学&pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 4.4 获取专业列表 - 热门专业
+GET {{baseUrl}}/major/list?hot=true&sortField=avgSalary&sortOrder=DESC&pageNum=1&pageSize=20
+Content-Type: {{contentType}}
+
+### 4.5 获取专业列表 - 按薪资排序
+GET {{baseUrl}}/major/list?sortField=avgSalary&sortOrder=DESC&pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 4.6 获取专业列表 - 本科专业
+GET {{baseUrl}}/major/list?degree=本科&pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 4.7 获取专业详情
+# 注意: 需要先从专业列表获取真实的专业ID，然后更新 @majorId 变量
+GET {{baseUrl}}/major/{{majorId}}
+Content-Type: {{contentType}}
+
+### 4.8 获取开设该专业的院校列表
+GET {{baseUrl}}/major/{{majorId}}/colleges?pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 4.9 获取开设该专业的985院校
+GET {{baseUrl}}/major/{{majorId}}/colleges?level=985&sortField=rank&sortOrder=ASC&pageNum=1&pageSize=20
+Content-Type: {{contentType}}
+
+
+###############################################################################
+# 5. 志愿模块 API (需要认证)
+###############################################################################
+
+### 5.1 获取我的志愿列表
+GET {{baseUrl}}/volunteer/my
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 5.2 保存志愿草稿
+POST {{baseUrl}}/volunteer/save
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": [
+    {
+      "priority": 1,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "冲刺院校"
+    },
+    {
+      "priority": 2,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "稳妥院校"
+    }
+  ]
+}
+
+### 5.3 提交志愿
+POST {{baseUrl}}/volunteer/submit
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": [
+    {
+      "priority": 1,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "冲刺院校"
+    },
+    {
+      "priority": 2,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "稳妥院校"
+    },
+    {
+      "priority": 3,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "保底院校"
+    }
+  ]
+}
+
+### 5.4 智能推荐志愿
+POST {{baseUrl}}/volunteer/recommend
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "score": 650,
+  "province": "浙江省",
+  "subjectType": "physics",
+  "rank": 5000,
+  "preference": {
+    "provincePreference": ["浙江省", "上海市", "北京市"],
+    "typePreference": ["综合类", "理工类"],
+    "majorPreference": ["计算机类", "电子信息类"]
+  },
+  "count": 30
+}
+
+### 5.5 智能推荐志愿 - 简化版
+POST {{baseUrl}}/volunteer/recommend
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "score": 620,
+  "province": "浙江省",
+  "subjectType": "physics",
+  "rank": 8000,
+  "count": 20
+}
+
+### 5.6 分析志愿录取概率
+POST {{baseUrl}}/volunteer/analyze
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": [
+    {
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}"
+    }
+  ],
+  "userScore": 650,
+  "userRank": 5000,
+  "province": "浙江省",
+  "subjectType": "physics"
+}
+
+### 5.7 删除志愿
+# 注意: 需要先获取志愿ID，然后更新 @volunteerId 变量
+DELETE {{baseUrl}}/volunteer/{{volunteerId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+
+###############################################################################
+# 6. 系统模块 API
+###############################################################################
+
+### 6.1 获取省份列表
+GET {{baseUrl}}/system/provinces
+Content-Type: {{contentType}}
+
+### 6.2 获取数据字典 - 院校类型
+GET {{baseUrl}}/system/dict?type=college_type
+Content-Type: {{contentType}}
+
+### 6.3 获取数据字典 - 院校层次
+GET {{baseUrl}}/system/dict?type=college_level
+Content-Type: {{contentType}}
+
+### 6.4 获取数据字典 - 专业门类
+GET {{baseUrl}}/system/dict?type=major_category
+Content-Type: {{contentType}}
+
+### 6.5 获取数据字典 - 科目类型
+GET {{baseUrl}}/system/dict?type=subject_type
+Content-Type: {{contentType}}
+
+### 6.6 获取系统配置
+GET {{baseUrl}}/system/config
+Content-Type: {{contentType}}
+
+### 6.7 获取系统统计
+GET {{baseUrl}}/system/statistics
+Content-Type: {{contentType}}
+
+### 6.8 文件上传 (需要替换为实际文件路径)
+# 注意: 文件路径需要根据实际情况修改
+POST {{baseUrl}}/system/upload
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="avatar.jpg"
+Content-Type: image/jpeg
+
+< ./test-avatar.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="type"
+
+avatar
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+
+###############################################################################
+# 7. 完整业务流程测试场景
+###############################################################################
+
+### ========== 场景1: 新用户注册登录流程 ==========
+
+### 步骤1: 发送注册验证码
+POST {{baseUrl}}/user/verify-code
+Content-Type: {{contentType}}
+
+{
+  "phone": "13900139001",
+  "type": "register"
+}
+
+### 步骤2: 用户注册
+POST {{baseUrl}}/user/register
+Content-Type: {{contentType}}
+
+{
+  "username": "zhangsan2024",
+  "password": "123456",
+  "nickname": "张三",
+  "phone": "13900139001",
+  "email": "zhangsan@example.com"
+}
+
+### 步骤3: 用户登录
+# @name userLogin
+POST {{baseUrl}}/user/login
+Content-Type: {{contentType}}
+
+{
+  "username": "zhangsan2024",
+  "password": "123456"
+}
+
+### 步骤4: 完善用户信息
+PUT {{baseUrl}}/user/info
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "realName": "张三",
+  "province": "浙江省",
+  "city": "杭州市",
+  "school": "杭州第一中学",
+  "examYear": 2024,
+  "examScore": 650,
+  "subjectType": "physics"
+}
+
+
+### ========== 场景2: 搜索院校并查看详情 ==========
+
+### 步骤1: 搜索浙江省的985/211院校
+GET {{baseUrl}}/college/list?province=浙江省&level=985&pageNum=1&pageSize=10
+Content-Type: {{contentType}}
+
+### 步骤2: 查看院校详情
+GET {{baseUrl}}/college/{{collegeId}}
+Content-Type: {{contentType}}
+
+### 步骤3: 查看历年分数线
+GET {{baseUrl}}/college/{{collegeId}}/scores?province=浙江省&subjectType=physics&years=5
+Content-Type: {{contentType}}
+
+### 步骤4: 查看招生计划
+GET {{baseUrl}}/college/{{collegeId}}/plan?year=2024&province=浙江省
+Content-Type: {{contentType}}
+
+
+### ========== 场景3: 智能推荐并填报志愿 ==========
+
+### 步骤1: 获取智能推荐
+POST {{baseUrl}}/volunteer/recommend
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "score": 650,
+  "province": "浙江省",
+  "subjectType": "physics",
+  "rank": 5000,
+  "preference": {
+    "provincePreference": ["浙江省", "上海市"],
+    "typePreference": ["综合类", "理工类"],
+    "majorPreference": ["计算机类"]
+  },
+  "count": 30
+}
+
+### 步骤2: 保存志愿草稿
+POST {{baseUrl}}/volunteer/save
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": [
+    {
+      "priority": 1,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "冲一冲"
+    }
+  ]
+}
+
+### 步骤3: 分析录取概率
+POST {{baseUrl}}/volunteer/analyze
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": [
+    {
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}"
+    }
+  ],
+  "userScore": 650,
+  "userRank": 5000,
+  "province": "浙江省",
+  "subjectType": "physics"
+}
+
+### 步骤4: 查看我的志愿
+GET {{baseUrl}}/volunteer/my
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤5: 正式提交志愿
+POST {{baseUrl}}/volunteer/submit
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": [
+    {
+      "priority": 1,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "冲一冲"
+    },
+    {
+      "priority": 2,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "稳一稳"
+    },
+    {
+      "priority": 3,
+      "collegeId": "{{collegeId}}",
+      "majorId": "{{majorId}}",
+      "isObeyAdjustment": true,
+      "remarks": "保一保"
+    }
+  ]
+}
+
+
+###############################################################################
+# 8. 边界条件和错误测试
+###############################################################################
+
+### 8.1 测试401错误 - 未授权访问
+GET {{baseUrl}}/user/info
+Content-Type: {{contentType}}
+
+### 8.2 测试401错误 - 无效Token
+GET {{baseUrl}}/user/info
+Authorization: Bearer invalid_token_here
+Content-Type: {{contentType}}
+
+### 8.3 测试400错误 - 用户名格式错误
+POST {{baseUrl}}/user/register
+Content-Type: {{contentType}}
+
+{
+  "username": "ab",
+  "password": "123456",
+  "nickname": "测试",
+  "phone": "13800138000"
+}
+
+### 8.4 测试400错误 - 密码太短
+POST {{baseUrl}}/user/register
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser",
+  "password": "12",
+  "nickname": "测试",
+  "phone": "13800138000"
+}
+
+### 8.5 测试400错误 - 手机号格式错误
+POST {{baseUrl}}/user/register
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser",
+  "password": "123456",
+  "nickname": "测试",
+  "phone": "12345"
+}
+
+### 8.6 测试404错误 - 院校不存在
+GET {{baseUrl}}/college/00000000-0000-0000-0000-000000000000
+Content-Type: {{contentType}}
+
+### 8.7 测试404错误 - 专业不存在
+GET {{baseUrl}}/major/00000000-0000-0000-0000-000000000000
+Content-Type: {{contentType}}
+
+### 8.8 测试400错误 - 缺少必填参数
+POST {{baseUrl}}/user/login
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser"
+}
+
+### 8.9 测试400错误 - 分页参数错误
+GET {{baseUrl}}/college/list?pageNum=0&pageSize=-1
+Content-Type: {{contentType}}
+
+### 8.10 测试400错误 - 志愿数量超限
+POST {{baseUrl}}/volunteer/save
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "volunteers": []
+}
+
+
+###############################################################################
+# 9. 性能测试接口
+###############################################################################
+
+### 9.1 测试大数据量查询 - 获取所有院校
+GET {{baseUrl}}/college/list?pageNum=1&pageSize=100
+Content-Type: {{contentType}}
+
+### 9.2 测试大数据量查询 - 获取所有专业
+GET {{baseUrl}}/major/list?pageNum=1&pageSize=100
+Content-Type: {{contentType}}
+
+### 9.3 测试复杂查询 - 多条件筛选
+GET {{baseUrl}}/college/list?province=浙江省&type=综合类&level=985&minScore=600&maxScore=700&sortField=rank&sortOrder=ASC&pageNum=1&pageSize=50
+Content-Type: {{contentType}}
+
+
+###############################################################################
+# 测试说明
+###############################################################################
+
+# 1. 安装 REST Client 插件
+#    VS Code 扩展市场搜索 "REST Client" 并安装
+#
+# 2. 配置测试环境
+#    - 修改 @baseUrl 为实际的后端地址
+#    - 启动后端服务: npm run dev
+#
+# 3. 测试流程
+#    Step 1: 测试健康检查接口
+#    Step 2: 测试用户注册和登录
+#    Step 3: 从登录响应中复制 token，更新 @token 变量
+#    Step 4: 测试需要认证的接口
+#    Step 5: 从院校/专业列表获取ID，更新相关变量
+#    Step 6: 测试完整业务流程
+#
+# 4. 发送请求
+#    点击每个请求上方的 "Send Request" 链接
+#    或使用快捷键: Ctrl+Alt+R (Windows) / Cmd+Alt+R (Mac)
+#
+# 5. 查看响应
+#    响应会在右侧新窗口显示
+#    支持 JSON 格式化和语法高亮
+#
+# 6. 注意事项
+#    - 某些测试依赖数据库中的真实数据
+#    - 需要先执行数据初始化脚本
+#    - Token 过期后需要重新登录获取
+#    - 文件上传测试需要提供真实文件路径
+#
+# 7. 快速测试建议顺序
+#    1) 健康检查
+#    2) 系统模块(无需认证)
+#    3) 用户注册登录
+#    4) 院校和专业查询
+#    5) 志愿管理(需要认证)
+
+###############################################################################
+# 变量使用说明
+###############################################################################
+
+# 使用 @variableName = value 定义变量
+# 使用 {{variableName}} 引用变量
+#
+# 示例:
+# @host = localhost
+# @port = 3000
+# GET http://{{host}}:{{port}}/api
+#
+# 从响应中提取变量:
+# # @name login
+# POST /api/login
+#
+# @token = {{login.response.body.data.token}}
+
+###############################################################################
+
+
+###############################################################################
+# 10. 智能体(Agent)模块 API (需要认证)
+###############################################################################
+
+# 测试会话ID (需要从创建会话的响应中获取)
+@sessionId =
+@userId =
+@taskId =
+
+### 10.1 开始新会话
+# @name startSession
+POST {{baseUrl}}/agent/start
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "{{userId}}",
+  "province": "浙江省",
+  "examScore": 650,
+  "subjectType": "physics"
+}
+
+### 10.2 获取当前活跃会话 (NEW API)
+GET {{baseUrl}}/agent/session/current
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.3 发送消息(普通模式)
+POST {{baseUrl}}/agent/chat
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "{{userId}}",
+  "sessionId": "{{sessionId}}",
+  "message": "我对计算机专业很感兴趣,希望在大城市发展"
+}
+
+### 10.4 发送消息(流式模式)
+POST {{baseUrl}}/agent/chat/stream
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "{{userId}}",
+  "sessionId": "{{sessionId}}",
+  "message": "我更看重学校的名气还是专业的排名?"
+}
+
+### 10.5 获取会话状态
+GET {{baseUrl}}/agent/session/{{sessionId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.6 获取会话的完整对话内容 (NEW API)
+GET {{baseUrl}}/agent/session/{{sessionId}}/messages
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.7 获取会话的对话内容(带分页)
+GET {{baseUrl}}/agent/session/{{sessionId}}/messages?limit=20&offset=0
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.8 生成志愿推荐 - 异步任务 (UPDATED API)
+# @name generateTask
+POST {{baseUrl}}/agent/generate
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "sessionId": "{{sessionId}}",
+  "count": 60
+}
+
+### 10.9 查询推荐生成任务状态 (NEW API)
+GET {{baseUrl}}/agent/generate/status/{{taskId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.9 暂停会话
+POST {{baseUrl}}/agent/session/{{sessionId}}/pause
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.10 恢复会话
+POST {{baseUrl}}/agent/session/{{sessionId}}/resume
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 10.11 重置会话(暂停所有活跃会话)
+POST {{baseUrl}}/agent/reset
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "{{userId}}"
+}
+
+### 10.12 搜索信息
+POST {{baseUrl}}/agent/search
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "query": "清华大学",
+  "type": "college"
+}
+
+### 10.13 清除缓存(调试用)
+POST {{baseUrl}}/agent/clear-cache
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "{{userId}}",
+  "sessionId": "{{sessionId}}"
+}
+
+
+### ========== 场景4: 智能体对话流程 ==========
+
+### 步骤1: 开始新会话
+# @name agentStart
+POST {{baseUrl}}/agent/start
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "user-id-here",
+  "province": "浙江省",
+  "examScore": 650,
+  "subjectType": "physics"
+}
+
+### 步骤2: 获取当前活跃会话
+GET {{baseUrl}}/agent/session/current
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤3: 开始对话 - 核心偏好收集
+POST {{baseUrl}}/agent/chat
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "user-id-here",
+  "sessionId": "session-id-from-step-1",
+  "message": "我对人工智能和计算机专业很感兴趣"
+}
+
+### 步骤4: 继续对话 - 地域偏好
+POST {{baseUrl}}/agent/chat
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "user-id-here",
+  "sessionId": "session-id-from-step-1",
+  "message": "我希望去北京、上海或者杭州这些大城市"
+}
+
+### 步骤5: 继续对话 - 院校类型偏好
+POST {{baseUrl}}/agent/chat
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "userId": "user-id-here",
+  "sessionId": "session-id-from-step-1",
+  "message": "我更看重学校的综合实力,希望是985或211院校"
+}
+
+### 步骤6: 查看对话历史
+GET {{baseUrl}}/agent/session/session-id-from-step-1/messages?limit=50&offset=0
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤7: 生成推荐(异步任务)
+# @name generateRecommendations
+POST {{baseUrl}}/agent/generate
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "sessionId": "session-id-from-step-1",
+  "count": 60
+}
+
+### 步骤8: 查询推荐生成状态(需要循环轮询)
+GET {{baseUrl}}/agent/generate/status/task-id-from-step-7
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤9: 查看会话状态和统计
+GET {{baseUrl}}/agent/session/session-id-from-step-1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+###############################################################################
+# 11. AI 工具模块 API (需要认证)
+###############################################################################
+
+# AI 工具提供 12 个功能供 AI Function Calling 使用
+# 包括查询院校、专业、推荐、录取分数线等功能,以及志愿表操作
+
+### ========== 查询工具 (Tools 1-8) ==========
+
+### 11.1 工具1: 搜索院校
+GET {{baseUrl}}/agent/tools/search-college?keyword=北京&limit=5
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.2 工具1: 搜索院校 - 按省份筛选
+GET {{baseUrl}}/agent/tools/search-college?province=北京&limit=10
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.3 工具1: 搜索院校 - 985院校
+GET {{baseUrl}}/agent/tools/search-college?is985=true&limit=20
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.4 工具1: 搜索院校 - 综合筛选
+GET {{baseUrl}}/agent/tools/search-college?province=浙江&type=综合&is211=true&minRank=1&maxRank=100&limit=10
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.5 工具2: 搜索专业
+GET {{baseUrl}}/agent/tools/search-major?keyword=计算机&limit=5
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.6 工具2: 搜索专业 - 按门类筛选
+GET {{baseUrl}}/agent/tools/search-major?category=工学&limit=10
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.7 工具2: 搜索专业 - 本科专业
+GET {{baseUrl}}/agent/tools/search-major?degree=本科&subCategory=计算机类&limit=10
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.8 工具3: 根据分数推荐院校
+GET {{baseUrl}}/agent/tools/recommend-colleges?score=600&province=浙江&subjectType=物理&limit=20
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.9 工具3: 根据分数推荐院校 - 带排名
+GET {{baseUrl}}/agent/tools/recommend-colleges?score=650&province=北京&subjectType=理科&rank=5000&limit=30
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.10 工具4: 查询历年录取分数线 - 按院校ID
+GET {{baseUrl}}/agent/tools/admission-scores?collegeId={{collegeId}}&province=浙江&subjectType=物理&years=3
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.11 工具4: 查询历年录取分数线 - 按院校名称
+GET {{baseUrl}}/agent/tools/admission-scores?collegeName=清华大学&province=北京&subjectType=理科&years=5
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.12 工具5: 查询分数对应排名
+GET {{baseUrl}}/agent/tools/score-rank?score=600&province=浙江&subjectType=物理
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.13 工具5: 查询分数对应排名 - 高分段
+GET {{baseUrl}}/agent/tools/score-rank?score=680&province=北京&subjectType=理科
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.14 工具6: 查询城市信息
+GET {{baseUrl}}/agent/tools/city-info?city=北京
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.15 工具6: 查询城市信息 - 杭州
+GET {{baseUrl}}/agent/tools/city-info?city=杭州
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.16 工具7: 查询院校详细信息
+GET {{baseUrl}}/agent/tools/college-detail/{{collegeId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.17 工具8: 查询专业详细信息
+GET {{baseUrl}}/agent/tools/major-detail/{{majorId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+
+### ========== 志愿表操作工具 (Tools 9-12) ==========
+
+### 11.18 工具9: 获取用户当前志愿表
+GET {{baseUrl}}/agent/tools/volunteers
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.19 工具10: 添加志愿
+POST {{baseUrl}}/agent/tools/volunteers
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "collegeId": "{{collegeId}}",
+  "majorId": "{{majorId}}",
+  "priority": 1,
+  "isObeyAdjustment": true
+}
+
+### 11.20 工具10: 添加志愿 - 不指定优先级(自动添加到末尾)
+POST {{baseUrl}}/agent/tools/volunteers
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "collegeId": "{{collegeId}}",
+  "majorId": "{{majorId}}",
+  "isObeyAdjustment": false
+}
+
+### 11.21 工具11: 删除志愿
+DELETE {{baseUrl}}/agent/tools/volunteers/{{volunteerId}}
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 11.22 工具12: 调整志愿顺序
+PUT {{baseUrl}}/agent/tools/volunteers/{{volunteerId}}/order
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "newPriority": 3
+}
+
+### 11.23 工具12: 调整志愿顺序 - 移到第一位
+PUT {{baseUrl}}/agent/tools/volunteers/{{volunteerId}}/order
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "newPriority": 1
+}
+
+
+### ========== 场景5: AI Function Calling 完整流程 ==========
+
+### 步骤1: 用户询问"帮我推荐适合600分的院校"
+# AI 识别需要调用工具3: recommend_colleges
+GET {{baseUrl}}/agent/tools/recommend-colleges?score=600&province=浙江&subjectType=物理&limit=20
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤2: 用户询问"清华大学历年在浙江的录取分数线是多少"
+# AI 识别需要调用工具4: get_admission_scores
+GET {{baseUrl}}/agent/tools/admission-scores?collegeName=清华大学&province=浙江&subjectType=物理&years=5
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤3: 用户询问"600分在浙江省排名多少"
+# AI 识别需要调用工具5: get_score_rank
+GET {{baseUrl}}/agent/tools/score-rank?score=600&province=浙江&subjectType=物理
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤4: 用户说"帮我把浙江大学的计算机专业加入志愿表"
+# AI 识别需要调用工具1搜索院校 + 工具2搜索专业 + 工具10添加志愿
+
+# 4a. 搜索浙江大学
+GET {{baseUrl}}/agent/tools/search-college?keyword=浙江大学&limit=1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+# 4b. 搜索计算机专业
+GET {{baseUrl}}/agent/tools/search-major?keyword=计算机科学与技术&limit=1
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+# 4c. 添加到志愿表
+POST {{baseUrl}}/agent/tools/volunteers
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "collegeId": "college-id-from-4a",
+  "majorId": "major-id-from-4b",
+  "isObeyAdjustment": true
+}
+
+### 步骤5: 用户说"帮我查看当前志愿表"
+# AI 识别需要调用工具9: get_user_volunteers
+GET {{baseUrl}}/agent/tools/volunteers
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤6: 用户说"把第3个志愿移到第1位"
+# AI 识别需要调用工具12: reorder_volunteer
+PUT {{baseUrl}}/agent/tools/volunteers/volunteer-id-here/order
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+{
+  "newPriority": 1
+}
+
+### 步骤7: 用户说"删除我的第2个志愿"
+# AI 识别需要调用工具11: delete_volunteer
+DELETE {{baseUrl}}/agent/tools/volunteers/volunteer-id-here
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+### 步骤8: 用户询问"北京有哪些好大学"
+# AI 识别需要调用工具6: get_city_info
+GET {{baseUrl}}/agent/tools/city-info?city=北京
+Authorization: Bearer {{token}}
+Content-Type: {{contentType}}
+
+
+###############################################################################
+# 测试说明 - AI 工具模块
+###############################################################################
+
+# AI 工具模块提供 12 个工具供 AI Function Calling 使用:
+#
+# 查询工具 (1-8):
+#   1. search_college      - 搜索院校
+#   2. search_major        - 搜索专业
+#   3. recommend_colleges  - 根据分数推荐院校
+#   4. get_admission_scores - 查询历年录取分数线
+#   5. get_score_rank      - 查询分数对应排名
+#   6. get_city_info       - 查询城市信息
+#   7. get_college_detail  - 查询院校详细信息
+#   8. get_major_detail    - 查询专业详细信息
+#
+# 志愿表操作工具 (9-12):
+#   9. get_user_volunteers - 获取用户当前志愿表
+#   10. add_volunteer      - 添加志愿到志愿表
+#   11. delete_volunteer   - 删除志愿
+#   12. reorder_volunteer  - 调整志愿顺序
+#
+# 使用说明:
+# 1. 所有工具 API 都需要认证(JWT Token)
+# 2. 前端在 AI 对话中调用这些工具
+# 3. AI 根据用户意图自动选择合适的工具
+# 4. 工具执行结果返回给 AI,AI 生成自然语言回复
+# 5. 志愿表操作工具会触发右侧志愿表界面实时更新
+#
+# 完整集成文档:
+# 请参考: docs/AI_TOOLS_FRONTEND_INTEGRATION.md
+
+###############################################################################
