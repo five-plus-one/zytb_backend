@@ -2,6 +2,7 @@ import { AppDataSource } from '../config/database';
 import { ScoreRanking } from '../models/ScoreRanking';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Between } from 'typeorm';
+import * as XLSX from 'xlsx';
 
 export interface ScoreRankingQueryDto {
   pageNum?: number;
@@ -242,6 +243,209 @@ export class ScoreRankingService {
       province,
       subjectType,
       results
+    };
+  }
+
+  // Excel 导入功能
+  async importFromExcel(filePath: string, options?: { clearExisting?: boolean }) {
+    try {
+      // 读取 Excel 文件
+      const workbook = XLSX.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      // 转换为 JSON 数据
+      const rawData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      if (rawData.length === 0) {
+        throw new Error('Excel 文件中没有数据');
+      }
+
+      // 数据验证和转换
+      const validData: Partial<ScoreRanking>[] = [];
+      const errors: Array<{ row: number; error: string }> = [];
+
+      rawData.forEach((row, index) => {
+        const rowNum = index + 2; // Excel 行号（从2开始，1是表头）
+
+        try {
+          // 字段映射（支持中文列名和英文列名）
+          let year = row['年份'] || row['year'];
+          let province = row['省份'] || row['province'];
+          let subjectType = row['科类'] || row['科目类型'] || row['科目'] || row['subjectType'];
+          let score = row['分数'] || row['score'];
+          const count = row['人数'] || row['count'];
+          const cumulativeCount = row['累计人数'] || row['cumulativeCount'];
+          const rank = row['位次'] || row['rank'];
+
+          // 清理年份格式（去除"年"字）
+          if (year && typeof year === 'string') {
+            year = String(year).replace(/年/g, '').trim();
+          }
+
+          // 清理省份格式（去除"省"字，标准化）
+          if (province && typeof province === 'string') {
+            province = String(province).replace(/省/g, '').trim();
+          }
+
+          // 清理科目格式（标准化为科类）
+          if (subjectType && typeof subjectType === 'string') {
+            subjectType = String(subjectType).trim();
+            // 标准化科目名称
+            const subjectMap: Record<string, string> = {
+              '物理': '物理类',
+              '历史': '历史类',
+              '理科': '理科',
+              '文科': '文科',
+              '综合': '综合'
+            };
+            subjectType = subjectMap[subjectType] || subjectType;
+          }
+
+          // 清理分数格式（处理"及以上"等文字）
+          if (score && typeof score === 'string') {
+            // 提取数字，去除"及以上"、"以下"等文字
+            const scoreMatch = String(score).match(/\d+/);
+            if (scoreMatch) {
+              score = scoreMatch[0];
+            }
+          }
+
+          // 验证必填字段
+          if (!year || !province || !subjectType || score === undefined || count === undefined) {
+            errors.push({
+              row: rowNum,
+              error: '缺少必填字段（年份、省份、科类、分数、人数）'
+            });
+            return;
+          }
+
+          // 数据类型转换和验证
+          const yearNum = parseInt(year);
+          const scoreNum = parseInt(score);
+          const countNum = parseInt(count);
+          const cumulativeCountNum = cumulativeCount ? parseInt(cumulativeCount) : 0;
+          const rankNum = rank ? parseInt(rank) : undefined;
+
+          if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+            errors.push({ row: rowNum, error: '年份格式错误或超出范围' });
+            return;
+          }
+
+          if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > 999) {
+            errors.push({ row: rowNum, error: '分数格式错误或超出范围' });
+            return;
+          }
+
+          if (isNaN(countNum) || countNum < 0) {
+            errors.push({ row: rowNum, error: '人数格式错误' });
+            return;
+          }
+
+          // 构建有效数据
+          validData.push({
+            year: yearNum,
+            province: String(province).trim(),
+            subjectType: String(subjectType).trim(),
+            score: scoreNum,
+            count: countNum,
+            cumulativeCount: cumulativeCountNum,
+            rank: rankNum
+          });
+        } catch (error: any) {
+          errors.push({
+            row: rowNum,
+            error: `数据解析错误: ${error.message}`
+          });
+        }
+      });
+
+      // 如果有验证错误，返回错误信息
+      if (errors.length > 0) {
+        return {
+          success: false,
+          message: `数据验证失败，共 ${errors.length} 条错误`,
+          totalRows: rawData.length,
+          validRows: validData.length,
+          errorRows: errors.length,
+          errors: errors.slice(0, 100) // 最多返回前100个错误
+        };
+      }
+
+      // 如果选择清空已有数据
+      if (options?.clearExisting && validData.length > 0) {
+        const firstRecord = validData[0];
+        await this.rankingRepository.delete({
+          year: firstRecord.year,
+          province: firstRecord.province,
+          subjectType: firstRecord.subjectType
+        });
+      }
+
+      // 批量插入数据
+      const result = await this.batchCreate(validData);
+
+      return {
+        success: true,
+        message: '导入成功',
+        totalRows: rawData.length,
+        validRows: validData.length,
+        insertedRows: result.insertedCount,
+        errorRows: 0,
+        errors: []
+      };
+    } catch (error: any) {
+      throw new Error(`Excel 导入失败: ${error.message}`);
+    }
+  }
+
+  // 批量创建记录
+  async batchCreate(data: Partial<ScoreRanking>[]) {
+    if (data.length === 0) {
+      return { insertedCount: 0 };
+    }
+
+    // 使用事务批量插入
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 分批插入（每次1000条）
+      const batchSize = 1000;
+      let insertedCount = 0;
+
+      for (let i = 0; i < data.length; i += batchSize) {
+        const batch = data.slice(i, i + batchSize);
+        await queryRunner.manager.save(ScoreRanking, batch);
+        insertedCount += batch.length;
+      }
+
+      await queryRunner.commitTransaction();
+
+      return { insertedCount };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  // 清空指定条件的数据
+  async clearData(year?: number, province?: string, subjectType?: string) {
+    const where: any = {};
+
+    if (year) where.year = year;
+    if (province) where.province = province;
+    if (subjectType) where.subjectType = subjectType;
+
+    const result = await this.rankingRepository.delete(where);
+
+    return {
+      success: true,
+      deletedCount: result.affected || 0,
+      message: `已删除 ${result.affected || 0} 条记录`
     };
   }
 }

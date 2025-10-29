@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { ScoreRankingController } from '../controllers/scoreRanking.controller';
+import { ScoreRankingController, uploadMiddleware } from '../controllers/scoreRanking.controller';
 
 const router = Router();
 const scoreRankingController = new ScoreRankingController();
@@ -24,5 +24,11 @@ router.get('/options/years', (req, res) => scoreRankingController.getAvailableYe
 
 // 获取可用的省份列表
 router.get('/options/provinces', (req, res) => scoreRankingController.getAvailableProvinces(req, res));
+
+// Excel 导入
+router.post('/import', uploadMiddleware, (req, res) => scoreRankingController.importFromExcel(req, res));
+
+// 清空数据
+router.post('/clear', (req, res) => scoreRankingController.clearData(req, res));
 
 export default router;

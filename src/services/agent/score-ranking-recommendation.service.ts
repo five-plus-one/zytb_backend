@@ -171,8 +171,9 @@ export class ScoreRankingRecommendationService {
   /**
    * 根据排名范围查询候选
    * 核心改进:
-   * 1. 从EnrollmentPlan(招生简章)查询,关联AdmissionScore(历史录取分数)
-   * 2. 返回每个专业组内的所有专业(最多6个),供用户排序
+   * 1. 以EnrollmentPlan(招生计划)为主查询
+   * 2. 对每个招生计划,模糊匹配AdmissionScore(历史录取分数)
+   * 3. 确保所有专业信息来自招生计划,不显示"未知"
    */
   private async fetchCandidatesByRanking(
     userScore: number,
@@ -193,130 +194,154 @@ export class ScoreRankingRecommendationService {
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 3;
 
-    // 步骤1: 从AdmissionScore查询符合排名范围的院校专业组
-    const scoreRepo = AppDataSource.getRepository(AdmissionScore);
-
-    const admissionData = await scoreRepo
-      .createQueryBuilder('score')
-      .where('score.sourceProvince = :province', { province })
-      .andWhere('score.subjectType = :subjectType', { subjectType })
-      .andWhere('score.year >= :startYear', { startYear })
-      .andWhere('score.minScore IS NOT NULL')
-      .andWhere(
-        '(score.minRank IS NOT NULL AND score.minRank BETWEEN :minRank AND :maxRank) OR ' +
-        '(score.minRank IS NULL AND score.minScore BETWEEN :minScore AND :maxScore)',
-        {
-          minRank: rankRanges.bold.min,
-          maxRank: rankRanges.stable.max,
-          minScore: userScore - 80,
-          maxScore: userScore + 50
-        }
-      )
-      .orderBy('score.year', 'DESC')
-      .addOrderBy('score.minScore', 'DESC')
-      .limit(500)
-      .getMany();
-
-    console.log(`📦 从历史录取数据查询到 ${admissionData.length} 条记录`);
-
-    if (admissionData.length === 0) {
-      console.warn('⚠️ 没有找到符合排名范围的历史录取数据');
-      return [];
-    }
-
-    // 步骤2: 根据院校名称和专业组,从EnrollmentPlan查询完整的招生简章信息
-    const planRepo = AppDataSource.getRepository(EnrollmentPlan);
-    const candidates: Candidate[] = [];
-    const seen = new Set<string>(); // 去重用
-
     // 规范化科类
     const normalizedSubjectType = subjectType.replace('类', '');
 
-    for (const admissionRecord of admissionData) {
-      const majorGroup = admissionRecord.majorGroup || '';
-      const key = `${admissionRecord.collegeName}-${majorGroup}`;
+    // 步骤1: 从EnrollmentPlan查询所有招生计划(最新年份)
+    const planRepo = AppDataSource.getRepository(EnrollmentPlan);
 
-      if (seen.has(key)) continue;
-      seen.add(key);
+    const enrollmentPlans = await planRepo
+      .createQueryBuilder('plan')
+      .where('plan.sourceProvince = :province', { province })
+      .andWhere(
+        '(plan.subjectType = :subjectType OR plan.subjectType = :normalizedSubjectType)',
+        { subjectType, normalizedSubjectType }
+      )
+      .orderBy('plan.year', 'DESC')
+      .addOrderBy('plan.collegeName', 'ASC')
+      .addOrderBy('plan.majorGroupCode', 'ASC')
+      .addOrderBy('plan.majorName', 'ASC')
+      .getMany();
 
-      // 查询该院校+专业组的所有专业(最新年份)
-      const enrollmentPlans = await planRepo
-        .createQueryBuilder('plan')
-        .where('plan.collegeName = :collegeName', { collegeName: admissionRecord.collegeName })
-        .andWhere('plan.sourceProvince = :province', { province })
-        .andWhere(
-          '(plan.subjectType = :subjectType OR plan.subjectType = :normalizedSubjectType)',
-          { subjectType, normalizedSubjectType }
-        )
-        .andWhere(
-          '(plan.majorGroupCode = :majorGroupCode OR plan.collegeMajorGroupCode = :collegeMajorGroupCode)',
-          {
-            majorGroupCode: majorGroup,
-            collegeMajorGroupCode: majorGroup
-          }
-        )
-        .orderBy('plan.year', 'DESC')
-        .addOrderBy('plan.majorName', 'ASC')
-        .limit(10) // 查询最多10个专业,防止数据过多
-        .getMany();
+    console.log(`📦 从招生计划查询到 ${enrollmentPlans.length} 条记录`);
 
-      console.log(`  ${admissionRecord.collegeName} ${majorGroup}: 查询到 ${enrollmentPlans.length} 个专业`);
+    if (enrollmentPlans.length === 0) {
+      console.warn('⚠️ 没有找到符合条件的招生计划');
+      return [];
+    }
 
-      // 如果没有找到任何专业,尝试更宽松的查询(只根据院校名称)
-      if (enrollmentPlans.length === 0) {
-        const fallbackPlans = await planRepo
-          .createQueryBuilder('plan')
-          .where('plan.collegeName = :collegeName', { collegeName: admissionRecord.collegeName })
-          .andWhere('plan.sourceProvince = :province', { province })
-          .andWhere(
-            '(plan.subjectType = :subjectType OR plan.subjectType = :normalizedSubjectType)',
-            { subjectType, normalizedSubjectType }
-          )
-          .orderBy('plan.year', 'DESC')
-          .addOrderBy('plan.majorName', 'ASC')
-          .limit(6)
-          .getMany();
+    // 步骤2: 按院校+专业组分组
+    const groupedPlans = new Map<string, EnrollmentPlan[]>();
 
-        console.log(`  ${admissionRecord.collegeName}: 宽松查询找到 ${fallbackPlans.length} 个专业`);
+    for (const plan of enrollmentPlans) {
+      // 使用院校代码+专业组代码作为key,确保精确分组
+      const majorGroupKey = plan.majorGroupCode || plan.collegeMajorGroupCode || 'default';
+      const key = `${plan.collegeCode}-${majorGroupKey}`;
 
-        if (fallbackPlans.length > 0) {
-          enrollmentPlans.push(...fallbackPlans);
-        }
+      if (!groupedPlans.has(key)) {
+        groupedPlans.set(key, []);
       }
+      groupedPlans.get(key)!.push(plan);
+    }
 
-      // 提取基本信息
-      const firstPlan = enrollmentPlans[0];
-      const collegeCode = firstPlan?.collegeCode || 'unknown';
-      const majorGroupCode = firstPlan?.majorGroupCode || majorGroup;
-      const majorGroupName = firstPlan?.majorGroupName || majorGroup || '未知专业组';
+    console.log(`📊 分组后共 ${groupedPlans.size} 个院校专业组`);
 
-      // 构建专业列表(最多6个)
-      const majors = enrollmentPlans.slice(0, 6).map(plan => ({
+    // 步骤3: 为每个院校专业组模糊匹配历年录取分数
+    const scoreRepo = AppDataSource.getRepository(AdmissionScore);
+    const candidates: Candidate[] = [];
+
+    for (const [key, plans] of groupedPlans.entries()) {
+      const firstPlan = plans[0];
+      const collegeCode = firstPlan.collegeCode;
+      const collegeName = firstPlan.collegeName;
+      const majorGroupCode = firstPlan.majorGroupCode || firstPlan.collegeMajorGroupCode;
+      const majorGroupName = firstPlan.majorGroupName;
+
+      // 构建专业列表(最多6个) - 使用当前分组的plans
+      const majors = plans.slice(0, 6).map(plan => ({
         majorCode: plan.majorCode,
         majorName: plan.majorName,
         planCount: plan.planCount,
-        tuitionFee: plan.tuitionFee,
+        tuitionFee: plan.tuition,
         studyYears: plan.studyYears,
         subjectRequirements: plan.subjectRequirements
       }));
 
       const totalPlanCount = majors.reduce((sum, m) => sum + m.planCount, 0);
 
-      const scoreDiff = userScore - (admissionRecord.minScore || 0);
-      const rankDiff = admissionRecord.minRank && userRank ? userRank - admissionRecord.minRank : undefined;
+      // 模糊匹配历年录取分数
+      // 策略1: 精确匹配 - 院校名称 + 专业组
+      let admissionScores = await scoreRepo
+        .createQueryBuilder('score')
+        .where('score.sourceProvince = :province', { province })
+        .andWhere('score.collegeName = :collegeName', { collegeName })
+        .andWhere('score.subjectType = :subjectType', { subjectType })
+        .andWhere('score.year >= :startYear', { startYear })
+        .andWhere('score.minScore IS NOT NULL')
+        .andWhere('score.majorGroup = :majorGroup', { majorGroup: majorGroupCode })
+        .orderBy('score.year', 'DESC')
+        .limit(3)
+        .getMany();
+
+      // 策略2: 如果精确匹配失败,尝试模糊匹配 - 只按院校名称,找相近的专业组
+      if (admissionScores.length === 0 && majorGroupCode) {
+        admissionScores = await scoreRepo
+          .createQueryBuilder('score')
+          .where('score.sourceProvince = :province', { province })
+          .andWhere('score.collegeName = :collegeName', { collegeName })
+          .andWhere('score.subjectType = :subjectType', { subjectType })
+          .andWhere('score.year >= :startYear', { startYear })
+          .andWhere('score.minScore IS NOT NULL')
+          .andWhere('score.majorGroup LIKE :pattern', { pattern: `%${majorGroupCode}%` })
+          .orderBy('score.year', 'DESC')
+          .limit(3)
+          .getMany();
+      }
+
+      // 策略3: 如果还是失败,只按院校名称查询最近的录取分数
+      if (admissionScores.length === 0) {
+        admissionScores = await scoreRepo
+          .createQueryBuilder('score')
+          .where('score.sourceProvince = :province', { province })
+          .andWhere('score.collegeName = :collegeName', { collegeName })
+          .andWhere('score.subjectType = :subjectType', { subjectType })
+          .andWhere('score.year >= :startYear', { startYear })
+          .andWhere('score.minScore IS NOT NULL')
+          .orderBy('score.year', 'DESC')
+          .addOrderBy('score.minScore', 'ASC')
+          .limit(3)
+          .getMany();
+      }
+
+      console.log(`  ${collegeName} ${majorGroupCode || '(无专业组)'}: 匹配到 ${admissionScores.length} 条历年分数`);
+
+      // 如果完全没有历年分数,跳过这个候选
+      if (admissionScores.length === 0) {
+        console.log(`  ⚠️ ${collegeName} 无历年分数数据,跳过`);
+        continue;
+      }
+
+      // 使用最近一年的数据
+      const latestScore = admissionScores[0];
+      const avgScore = admissionScores.reduce((sum, s) => sum + (s.minScore || 0), 0) / admissionScores.length;
+
+      // 计算分数和排名差异
+      const scoreDiff = userScore - (latestScore.minScore || 0);
+      const rankDiff = latestScore.minRank && userRank ? userRank - latestScore.minRank : undefined;
+
+      // 判断是否在合理范围内
+      const isInReasonableRange =
+        (latestScore.minRank && userRank &&
+         userRank >= rankRanges.bold.min && userRank <= rankRanges.stable.max) ||
+        (scoreDiff >= -80 && scoreDiff <= 50);
+
+      if (!isInReasonableRange) {
+        console.log(`  ⏭️ ${collegeName} 分数/排名不在合理范围,跳过`);
+        continue;
+      }
 
       candidates.push({
         collegeCode: collegeCode,
         collegeId: collegeCode,
-        collegeName: admissionRecord.collegeName,
+        collegeName: collegeName,
         majorGroupCode: majorGroupCode,
-        majorGroupName: majorGroupName,
+        majorGroupName: majorGroupName || '未命名专业组',
         enrollmentPlanCount: totalPlanCount,
-        majors: majors, // 专业列表
-        historicalMinScore: admissionRecord.minScore || 0,
-        historicalMinRank: admissionRecord.minRank,
-        historicalAvgScore: admissionRecord.minScore || 0,
-        year: admissionRecord.year,
+        majors: majors, // 专业列表来自招生计划
+        historicalMinScore: latestScore.minScore || 0,
+        historicalMinRank: latestScore.minRank,
+        historicalAvgScore: Math.round(avgScore),
+        year: latestScore.year,
         userScoreDiff: scoreDiff,
         userRankDiff: rankDiff,
         totalScore: 0,
