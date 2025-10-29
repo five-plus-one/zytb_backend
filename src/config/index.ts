@@ -59,11 +59,21 @@ export default {
     filePath: process.env.LOG_FILE_PATH || './logs'
   },
 
+  // LLM 配置
+  llm: {
+    apiKey: process.env.LLM_API_KEY || '',
+    baseURL: process.env.LLM_BASE_URL || 'https://api.ai.five-plus-one.com/v1',
+    model: process.env.LLM_MODEL || 'deepseek-chat',
+    temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.7'),
+    maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '4000', 10),
+    maxIterations: parseInt(process.env.LLM_MAX_ITERATIONS || '5', 10)
+  },
+
   // 志愿填报配置
   volunteer: {
-    currentYear: 2024,
+    currentYear: 2025,
     maxVolunteerCount: 96,
-    startDate: '2024-06-25',
-    endDate: '2024-06-30'
+    startDate: '2025-06-25',
+    endDate: '2025-11-30'
   }
 };

@@ -13,6 +13,7 @@ import toolsRoutes from './tools.routes';
 import equivalentScoreRoutes from './equivalentScore.routes';
 import majorFilterRoutes from './majorFilter.routes';
 import enrollmentPlanDetailRoutes from './enrollmentPlanDetail.routes';
+import aiRoutes from './ai.routes';
 
 const router = Router();
 
@@ -33,6 +34,9 @@ router.use('/diagnostic', diagnosticRoutes);
 router.use('/equivalent-score', equivalentScoreRoutes);  // 等位分查询
 router.use('/major-filter', majorFilterRoutes);          // 专业筛选
 router.use('/enrollment-plan-detail', enrollmentPlanDetailRoutes); // 招生计划详情
+
+// AI Agent 路由
+router.use('/ai', aiRoutes);  // 智能AI助手
 
 // 健康检查接口
 router.get('/health', (req, res) => {

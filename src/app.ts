@@ -8,6 +8,7 @@ import { initDatabase } from './config/database';
 import logger from './config/logger';
 import routes from './routes';
 import { errorHandler, notFoundHandler } from './middlewares/error';
+import { initializeTools } from './ai/tools';
 
 const app: Application = express();
 
@@ -54,6 +55,10 @@ const startServer = async () => {
     // 初始化数据库
     await initDatabase();
 
+    // 初始化 AI 工具
+    initializeTools();
+    logger.info('✅ AI 工具初始化成功');
+
     // 启动 HTTP 服务
     const port = config.app.port;
     app.listen(port, () => {
@@ -62,6 +67,7 @@ const startServer = async () => {
       console.log(`📝 环境: ${config.app.env}`);
       console.log(`🌐 地址: http://localhost:${port}`);
       console.log(`📡 API: http://localhost:${port}${config.app.apiPrefix}`);
+      console.log(`🤖 AI Agent: http://localhost:${port}${config.app.apiPrefix}/ai`);
       console.log('=================================');
     });
   } catch (error) {
