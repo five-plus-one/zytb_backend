@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AgentService } from '../services/agent/agent.service';
+import { AIAgentService } from '../ai/agent.service'; // 新的带工具的AI Agent
 import cacheService from '../services/cache.service';
 import { ResponseUtil } from '../utils/response';
 
@@ -8,6 +9,7 @@ import { ResponseUtil } from '../utils/response';
  */
 
 const agentService = new AgentService();
+const aiAgentService = new AIAgentService(); // 实例化新的AI Agent
 
 export class AgentController {
   /**
@@ -65,7 +67,7 @@ export class AgentController {
   }
 
   /**
-   * 发送消息(流式模式)
+   * 发送消息(流式模式) - 使用带工具调用的AI Agent
    * POST /api/agent/chat/stream
    */
   static async chatStream(req: Request, res: Response): Promise<void> {
@@ -86,14 +88,44 @@ export class AgentController {
       // 发送初始连接消息
       res.write('data: {"type":"connected"}\n\n');
 
-      // 流式生成响应
-      for await (const chunk of agentService.chatStream({
-        userId,
-        sessionId,
-        message
-      })) {
-        // 发送文本块
-        res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+      // 1. 获取旧系统的会话上下文(用于保存消息和维护历史)
+      const conversationService = (agentService as any).conversationService;
+
+      // 保存用户消息
+      await conversationService.addMessage(sessionId, 'user', message, 'chat');
+
+      // 获取最近的对话历史
+      const recentMessages = await conversationService.getRecentMessages(sessionId, 10);
+      const conversationHistory = recentMessages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      // 2. 使用新的AI Agent Service (带工具调用)
+      console.log(`\n🚀 [AgentController] 使用AIAgentService处理消息`);
+      console.log(`   用户ID: ${userId}, 会话ID: ${sessionId}`);
+
+      let fullResponse = '';
+      let responseMetadata: any = null;
+
+      for await (const chunk of aiAgentService.chatStream(message, conversationHistory, userId)) {
+        if (typeof chunk === 'string') {
+          // 文本块
+          fullResponse += chunk;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+        } else {
+          // AgentResponse对象 (最终响应)
+          responseMetadata = chunk.metadata;
+          if (chunk.message && !fullResponse) {
+            fullResponse = chunk.message;
+          }
+          console.log(`\n✅ [AgentController] AI Agent完成，迭代次数: ${chunk.metadata?.iterationsCount || 0}`);
+        }
+      }
+
+      // 3. 保存助手响应到旧系统
+      if (fullResponse) {
+        await conversationService.addMessage(sessionId, 'assistant', fullResponse, 'chat');
       }
 
       // 发送完成消息

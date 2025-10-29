@@ -20,7 +20,7 @@ export default {
     username: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'volunteer_system',
-    synchronize: process.env.NODE_ENV === 'development',
+    synchronize: false, // 暂时禁用自动同步以避免索引冲突
     logging: process.env.NODE_ENV === 'development',
     entities: [path.join(__dirname, '../models/**/*.{ts,js}')],
     migrations: [path.join(__dirname, '../migrations/**/*.{ts,js}')],

@@ -192,7 +192,10 @@ export class AIAgentService {
 # 当前系统能力
 - 支持省份：江苏（院校+专业组模式）
 - 支持科类：物理类、历史类
-- 支持年份：2022-2025（3年历史数据）
+- **数据年份说明**：
+  * 招生计划数据：2025年（使用filter_majors时year参数应设为2025）
+  * 录取分数数据：2024年及之前3年
+  * 位次数据：2025年
 - 核心功能：等位分查询、位次分数转换、专业筛选、院校历史统计、招生计划查询、志愿表管理
 
 ## 志愿表管理能力
@@ -203,6 +206,16 @@ export class AIAgentService {
 - 清空志愿表：重新开始填报
 - 专业组对比：帮助用户在多个专业组之间做选择
 - 专业信息查询：查询某个专业在哪些院校开设，专业组包含哪些专业
+
+## 重要提示：省内院校筛选
+- 当用户明确要求"省内"、"本省"院校时，必须在filter_majors工具中传递collegeProvince参数
+- 例如：用户说"江苏省内的计算机专业"，则应传递 collegeProvince: "江苏"
+- collegeProvince参数表示院校所在省份，不是生源地省份
+- 分数范围建议：
+  * 冲一冲：scoreRange设为30-50分
+  * 稳一稳：scoreRange设为20-30分
+  * 保一保：scoreRange设为10-20分
+  * 如果用户未明确要求，默认使用30分范围以获得更多结果
 
 # 特别提醒
 - 波动率的根源是人，所有工具都是辅助
@@ -225,6 +238,14 @@ export class AIAgentService {
     let iterationsCount = 0;
     const maxIterations = 10; // 防止无限循环
 
+    // 模型回退列表 (经过测试验证，支持工具调用)
+    const modelsToTry = [
+      'Doubao-1.5-pro-256k',      // 豆包 (主模型，已验证)
+      'doubao-1-5-pro-32k-250115', // 豆包备选 (已验证)
+      'glm-4.5',                  // 智谱 AI (已验证)
+      config.llm.model            // 配置的模型作为最后备选
+    ];
+
     try {
       // 构建消息历史
       const messages: Message[] = [
@@ -240,15 +261,47 @@ export class AIAgentService {
       while (iterationsCount < maxIterations) {
         iterationsCount++;
 
-        // 调用LLM
-        const response = await this.client.chat.completions.create({
-          model: config.llm.model,
-          messages: messages as any,
-          tools: tools as any,
-          tool_choice: 'auto',
-          temperature: 0.7,
-          max_tokens: 2000
-        });
+        let response = null;
+        let lastError = null;
+
+        // 尝试不同的模型
+        for (const model of modelsToTry) {
+          try {
+            if (iterationsCount === 1) {
+              // 只在第一轮迭代时打印模型信息
+              console.log(`🤖 尝试使用模型: ${model}`);
+            }
+
+            // 调用LLM
+            response = await this.client.chat.completions.create({
+              model: model,
+              messages: messages as any,
+              tools: tools as any,
+              tool_choice: 'auto',
+              temperature: 0.7,
+              max_tokens: 2000
+            });
+
+            if (iterationsCount === 1) {
+              console.log(`✅ 模型 ${model} 调用成功`);
+            }
+            break; // 成功则跳出循环
+          } catch (error: any) {
+            console.error(`❌ 模型 ${model} 调用失败:`, error.message);
+            lastError = error;
+
+            // 如果是最后一个模型，则抛出错误
+            if (model === modelsToTry[modelsToTry.length - 1]) {
+              throw error;
+            }
+            // 否则继续尝试下一个模型
+            continue;
+          }
+        }
+
+        if (!response) {
+          throw lastError || new Error('所有模型都无法调用');
+        }
 
         const choice = response.choices[0];
         const assistantMessage = choice.message;
@@ -350,6 +403,17 @@ export class AIAgentService {
     conversationHistory: Message[] = [],
     userId?: string
   ): AsyncGenerator<string | AgentResponse, void, unknown> {
+    const maxIterations = 10;
+    let iterationCount = 0;
+
+    // 模型回退列表 (经过测试验证，支持工具调用+流式输出)
+    const modelsToTry = [
+      'Doubao-1.5-pro-256k',      // 豆包 (主模型，已验证)
+      'doubao-1-5-pro-32k-250115', // 豆包备选 (已验证)
+      'glm-4.5',                  // 智谱 AI (已验证)
+      config.llm.model            // 配置的模型作为最后备选
+    ];
+
     try {
       // 构建消息历史
       const messages: Message[] = [
@@ -361,64 +425,193 @@ export class AIAgentService {
       // 获取所有可用工具
       const tools = this.getToolsForLLM();
 
-      // 调用LLM流式API
-      const stream = await this.client.chat.completions.create({
-        model: config.llm.model,
-        messages: messages as any,
-        tools: tools as any,
-        tool_choice: 'auto',
-        temperature: 0.7,
-        max_tokens: 2000,
-        stream: true
-      });
+      // 工具调用循环
+      while (iterationCount < maxIterations) {
+        iterationCount++;
 
-      let fullContent = '';
-      let toolCalls: any[] = [];
+        let stream = null;
+        let lastError = null;
 
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta;
+        // 尝试不同的模型
+        for (const model of modelsToTry) {
+          try {
+            if (iterationCount === 1) {
+              // 只在第一轮迭代时打印模型信息
+              console.log(`🤖 尝试使用模型: ${model}`);
+            }
 
-        // 流式输出内容
-        if (delta?.content) {
-          fullContent += delta.content;
-          yield delta.content;
+            // 调用LLM流式API
+            stream = await this.client.chat.completions.create({
+              model: model,
+              messages: messages as any,
+              tools: tools as any,
+              tool_choice: 'auto',
+              temperature: 0.7,
+              max_tokens: 2000,
+              stream: true
+            });
+
+            if (iterationCount === 1) {
+              console.log(`✅ 模型 ${model} 调用成功`);
+            }
+            break; // 成功则跳出循环
+          } catch (error: any) {
+            console.error(`❌ 模型 ${model} 调用失败:`, error.message);
+            lastError = error;
+
+            // 如果是最后一个模型，则抛出错误
+            if (model === modelsToTry[modelsToTry.length - 1]) {
+              throw error;
+            }
+            // 否则继续尝试下一个模型
+            yield `⚠️ 模型 ${model} 暂时不可用，正在尝试备用模型...\n`;
+            continue;
+          }
         }
 
-        // 收集工具调用
-        if (delta?.tool_calls) {
-          toolCalls.push(...delta.tool_calls);
+        if (!stream) {
+          throw lastError || new Error('所有模型都无法调用');
         }
-      }
 
-      // 如果有工具调用，执行并重新调用
-      if (toolCalls.length > 0) {
-        yield '\n\n[正在查询数据...]\n\n';
+        let fullContent = '';
+        let toolCallsMap: { [index: number]: any } = {}; // 使用map来正确累积tool_calls
+        let finishReason = '';
 
-        // 执行工具调用
+        // 处理流式响应
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta;
+          finishReason = chunk.choices[0]?.finish_reason || finishReason;
+
+          // 流式输出内容
+          if (delta?.content) {
+            fullContent += delta.content;
+            yield delta.content;
+          }
+
+          // 累积工具调用 (流式API中tool_calls是增量的)
+          if (delta?.tool_calls) {
+            for (const toolCallDelta of delta.tool_calls) {
+              const index = toolCallDelta.index;
+
+              if (!toolCallsMap[index]) {
+                toolCallsMap[index] = {
+                  id: toolCallDelta.id || '',
+                  type: 'function',
+                  function: {
+                    name: toolCallDelta.function?.name || '',
+                    arguments: toolCallDelta.function?.arguments || ''
+                  }
+                };
+              } else {
+                // 累积function name和arguments
+                if (toolCallDelta.function?.name) {
+                  toolCallsMap[index].function.name += toolCallDelta.function.name;
+                }
+                if (toolCallDelta.function?.arguments) {
+                  toolCallsMap[index].function.arguments += toolCallDelta.function.arguments;
+                }
+                if (toolCallDelta.id) {
+                  toolCallsMap[index].id = toolCallDelta.id;
+                }
+              }
+            }
+          }
+        }
+
+        // 转换为数组
+        const toolCalls = Object.values(toolCallsMap);
+
+        // 如果没有工具调用,结束循环
+        if (toolCalls.length === 0 || finishReason === 'stop') {
+          // 返回最终响应
+          yield {
+            success: true,
+            message: fullContent,
+            conversationHistory: [
+              ...messages,
+              { role: 'assistant', content: fullContent }
+            ],
+            metadata: {
+              iterationsCount: iterationCount
+            }
+          } as AgentResponse;
+          return;
+        }
+
+        // 有工具调用,执行工具
+        yield '\n\n🔍 正在查询数据...\n\n';
+
+        // 将assistant消息添加到历史(包含tool_calls)
+        messages.push({
+          role: 'assistant',
+          content: fullContent || null,
+          tool_calls: toolCalls as any
+        } as any);
+
+        // 执行所有工具调用
         for (const toolCall of toolCalls) {
-          const toolName = toolCall.function.name;
-          const toolParams = JSON.parse(toolCall.function.arguments);
+          try {
+            const toolName = toolCall.function.name;
+            const toolParams = JSON.parse(toolCall.function.arguments);
 
-          const result = await this.toolRegistry.execute(toolName, toolParams, {
-            userId,
-            timestamp: Date.now()
-          });
+            console.log(`\n🔧 调用工具: ${toolName}`);
+            console.log(`📝 参数:`, toolParams);
 
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: toolName,
-            content: JSON.stringify(result)
-          });
+            const result = await this.toolRegistry.execute(toolName, toolParams, {
+              userId,
+              timestamp: Date.now()
+            });
+
+            console.log(`✅ 工具执行完成:`, result.success ? '成功' : '失败');
+
+            // 将工具结果添加到消息历史
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolName,
+              content: JSON.stringify(result)
+            } as any);
+
+            // 通知前端工具执行完成
+            yield `✓ ${toolName} 执行完成\n`;
+          } catch (error: any) {
+            console.error(`❌ 工具执行失败: ${toolCall.function.name}`, error);
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              content: JSON.stringify({ success: false, error: error.message })
+            } as any);
+          }
         }
 
-        // 重新调用LLM处理工具结果
-        const finalResponse = await this.chat('', messages, userId);
-        yield finalResponse.message;
+        yield '\n📊 正在分析结果...\n\n';
+
+        // 继续下一轮循环,让LLM基于工具结果生成回复
       }
+
+      // 达到最大迭代次数
+      yield '\n\n⚠️ 已达到最大处理轮次,对话结束。\n';
+
+      yield {
+        success: false,
+        message: '处理超时',
+        conversationHistory: messages,
+        metadata: {
+          iterationsCount: iterationCount
+        }
+      } as AgentResponse;
+
     } catch (error: any) {
       console.error('流式处理错误:', error);
       yield `\n\n抱歉，处理出错: ${error.message}`;
+
+      yield {
+        success: false,
+        message: `处理出错: ${error.message}`,
+        conversationHistory: [],
+        metadata: {}
+      } as AgentResponse;
     }
   }
 
@@ -428,20 +621,38 @@ export class AIAgentService {
   private getToolsForLLM() {
     const definitions = this.toolRegistry.getAllDefinitions();
 
-    return definitions.map((def: ToolDefinition) => ({
-      type: 'function',
-      function: {
-        name: def.name,
-        description: def.description,
-        parameters: {
-          type: 'object',
-          properties: def.parameters,
-          required: Object.entries(def.parameters)
-            .filter(([_, param]: [string, any]) => param.required)
-            .map(([name, _]: [string, any]) => name)
-        }
+    const tools = definitions.map((def: ToolDefinition) => {
+      // 清理参数定义：移除内部的 required 字段，构建符合 OpenAI 格式的 properties
+      const cleanProperties: Record<string, any> = {};
+      for (const [key, param] of Object.entries(def.parameters)) {
+        const { required, ...cleanParam } = param as any;
+        cleanProperties[key] = cleanParam;
       }
-    }));
+
+      // 构建 required 数组
+      const requiredParams = Object.entries(def.parameters)
+        .filter(([_, param]: [string, any]) => param.required === true)
+        .map(([name, _]: [string, any]) => name);
+
+      return {
+        type: 'function',
+        function: {
+          name: def.name,
+          description: def.description,
+          parameters: {
+            type: 'object',
+            properties: cleanProperties,
+            required: requiredParams
+          }
+        }
+      };
+    });
+
+    // 调试日志：打印工具定义
+    console.log(`\n📋 传递给LLM的工具数量: ${tools.length}`);
+    console.log(`📋 工具名称列表:`, tools.map(t => t.function.name));
+
+    return tools;
   }
 
   /**

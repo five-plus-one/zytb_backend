@@ -2,6 +2,7 @@ import { AppDataSource } from '../config/database';
 import { EnrollmentPlan } from '../models/EnrollmentPlan';
 import { AdmissionScore } from '../models/AdmissionScore';
 import { ScoreRanking } from '../models/ScoreRanking';
+import { College } from '../models/College';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Brackets } from 'typeorm';
 
@@ -14,6 +15,7 @@ export interface MajorFilterQueryDto {
   majorDirection?: string;         // 专业方向/类别（支持模糊搜索）
   majorName?: string;              // 专业名称（支持模糊搜索）
   collegeName?: string;            // 院校名称（支持模糊搜索）
+  collegeProvince?: string;        // 院校所在省份（用于筛选省内/省外院校）
   batch?: string;                  // 批次
   pageNum?: number;
   pageSize?: number;
@@ -48,6 +50,7 @@ export class MajorFilterService {
   private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
   private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
   private scoreRankingRepository = AppDataSource.getRepository(ScoreRanking);
+  private collegeRepository = AppDataSource.getRepository(College);
 
   /**
    * 按分数范围和专业方向筛选招生计划
@@ -63,6 +66,7 @@ export class MajorFilterService {
       majorDirection,
       majorName,
       collegeName,
+      collegeProvince,
       batch
     } = query;
 
@@ -79,7 +83,32 @@ export class MajorFilterService {
 
     const userRank = userRanking?.rank || userRanking?.cumulativeCount || null;
 
-    // 2. 查询招生计划
+    // 2. 如果有collegeProvince参数，查询该省份的院校名称列表
+    let collegeNamesInProvince: string[] | null = null;
+
+    if (collegeProvince) {
+      const colleges = await this.collegeRepository
+        .createQueryBuilder('c')
+        .select('c.name')
+        .where('c.province = :province', { province: collegeProvince })
+        .getMany();
+
+      collegeNamesInProvince = colleges.map(c => c.name).filter(name => name);
+
+      console.log(`📍 筛选${collegeProvince}省内院校，找到${collegeNamesInProvince.length}所院校`);
+
+      // 如果没有找到任何院校，直接返回空结果
+      if (collegeNamesInProvince.length === 0) {
+        console.log(`⚠️ 未找到${collegeProvince}省的院校数据`);
+        return {
+          list: [],
+          userRank,
+          ...calculatePagination(0, pageNum, pageSize)
+        };
+      }
+    }
+
+    // 3. 查询招生计划
     const queryBuilder = this.enrollmentPlanRepository
       .createQueryBuilder('ep')
       .where('ep.year = :year', { year })
@@ -89,6 +118,13 @@ export class MajorFilterService {
     // 批次筛选
     if (batch) {
       queryBuilder.andWhere('ep.batch = :batch', { batch });
+    }
+
+    // 院校省份筛选（通过院校名称列表）
+    if (collegeNamesInProvince && collegeNamesInProvince.length > 0) {
+      queryBuilder.andWhere('ep.collegeName IN (:...collegeNames)', {
+        collegeNames: collegeNamesInProvince
+      });
     }
 
     // 专业方向/类别筛选（模糊搜索）
@@ -121,6 +157,8 @@ export class MajorFilterService {
     // 获取总数
     const total = await queryBuilder.getCount();
 
+    console.log(`📊 符合条件的招生计划总数: ${total}`);
+
     // 分页查询
     const plans = await queryBuilder
       .orderBy('ep.collegeName', 'ASC')
@@ -129,7 +167,9 @@ export class MajorFilterService {
       .take(pageSize)
       .getMany();
 
-    // 3. 查询往年录取分数（最近3年）
+    console.log(`📊 当前页查询到${plans.length}条招生计划记录`);
+
+    // 4. 查询往年录取分数（最近3年）
     const plansWithHistory: MajorFilterResult[] = await Promise.all(
       plans.map(async plan => {
         // 查询往年录取分数
@@ -175,7 +215,7 @@ export class MajorFilterService {
       })
     );
 
-    // 4. 根据分数范围和往年录取情况筛选
+    // 5. 根据分数范围和往年录取情况筛选
     const filteredPlans = plansWithHistory.filter(plan => {
       // 如果没有历史录取数据，保留（可能是新专业）
       if (!plan.historicalScores || plan.historicalScores.length === 0) {
@@ -192,6 +232,8 @@ export class MajorFilterService {
       const scoreDiff = Math.abs(latestScore.minScore - score);
       return scoreDiff <= scoreRange;
     });
+
+    console.log(`✅ 经过分数筛选后，剩余${filteredPlans.length}条结果`);
 
     return {
       list: filteredPlans,

@@ -6,7 +6,7 @@ import { MajorFilterService } from '../../services/majorFilter.service';
  */
 export class MajorFilterTool extends Tool {
   name = 'filter_majors';
-  description = '筛选专业招生计划：在圈定院校范围后，根据分数、专业方向、院校等条件筛选具体的招生计划。展示往年录取分数用于冲稳保判断。适用于"XXX分能上哪些计算机专业？"或"帮我看看这个分数段有什么好专业"。注意：江苏考生建议分数降5分使用，以确保专业选择权。';
+  description = '筛选专业招生计划：在圈定院校范围后，根据分数、专业方向、院校等条件筛选具体的招生计划。展示往年录取分数用于冲稳保判断。适用于"XXX分能上哪些计算机专业？"或"帮我看看这个分数段有什么好专业"。注意：1) 江苏考生建议分数降5分使用，以确保专业选择权；2) 如果用户要求"省内"或"本省"院校，必须设置collegeProvince参数为院校所在省份（如"江苏"）；3) 建议scoreRange设为30以获得更多结果，除非用户明确要求精确范围；4) year参数应使用2025。';
 
   parameters: Record<string, ToolParameter> = {
     year: {
@@ -49,6 +49,11 @@ export class MajorFilterTool extends Tool {
       description: '院校名称，支持模糊搜索',
       required: false
     },
+    collegeProvince: {
+      type: 'string',
+      description: '院校所在省份，用于筛选省内或省外院校（如"江苏"表示只查江苏省内院校）',
+      required: false
+    },
     pageSize: {
       type: 'number',
       description: '返回结果数量，默认20',
@@ -74,6 +79,7 @@ export class MajorFilterTool extends Tool {
         majorDirection: params.majorDirection,
         majorName: params.majorName,
         collegeName: params.collegeName,
+        collegeProvince: params.collegeProvince,
         pageNum: 1,
         pageSize: params.pageSize || 20
       });
