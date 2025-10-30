@@ -22,13 +22,18 @@ export interface MajorFilterQueryDto {
 }
 
 export interface MajorFilterResult {
-  id: string;
+  id: string;  // enrollmentPlanId - 可用于快速添加志愿
   year: number;
   sourceProvince: string;
   subjectType: string;
   batch: string;
   collegeCode: string;
   collegeName: string;
+  collegeProvince: string | null;
+  collegeCity: string | null;
+  collegeIs985: boolean;
+  collegeIs211: boolean;
+  collegeIsWorldClass: boolean;
   majorGroupCode: string | null;
   majorGroupName: string | null;
   majorCode: string;
@@ -38,6 +43,12 @@ export interface MajorFilterResult {
   tuition: number | null;
   subjectRequirements: string | null;
   majorRemarks: string | null;
+
+  // 新增：冲稳保判断和匹配度信息
+  admitProbability?: string;  // 录取概率: 冲/稳/保/未知
+  scoreGap?: number;          // 与历史最低分的差距
+  rankGap?: number | null;    // 与历史最低位次的差距
+
   // 往年录取数据
   historicalScores?: Array<{
     year: number;
@@ -154,25 +165,22 @@ export class MajorFilterService {
       });
     }
 
-    // 获取总数
-    const total = await queryBuilder.getCount();
+    // 获取总数（未经分数筛选）
+    const totalBeforeScoreFilter = await queryBuilder.getCount();
+    console.log(`📊 符合条件的招生计划总数（未经分数筛选）: ${totalBeforeScoreFilter}`);
 
-    console.log(`📊 符合条件的招生计划总数: ${total}`);
-
-    // 分页查询
-    const plans = await queryBuilder
+    // 4. 先获取所有符合条件的招生计划（不分页）
+    const allPlans = await queryBuilder
       .orderBy('ep.collegeName', 'ASC')
       .addOrderBy('ep.majorName', 'ASC')
-      .skip((pageNum - 1) * pageSize)
-      .take(pageSize)
       .getMany();
 
-    console.log(`📊 当前页查询到${plans.length}条招生计划记录`);
+    console.log(`📊 查询到${allPlans.length}条招生计划记录，准备查询历史分数`);
 
-    // 4. 查询往年录取分数（最近3年）
+    // 5. 查询往年录取分数并进行分数筛选
     const plansWithHistory: MajorFilterResult[] = await Promise.all(
-      plans.map(async plan => {
-        // 查询往年录取分数
+      allPlans.map(async plan => {
+        // 查询往年录取分数（最近3年）
         const historicalScores = await this.admissionScoreRepository
           .createQueryBuilder('as')
           .select(['as.year', 'as.minScore', 'as.minRank'])
@@ -189,6 +197,26 @@ export class MajorFilterService {
           .limit(3)
           .getRawMany();
 
+        // 计算冲稳保和分数差距
+        const latestScore = historicalScores.length > 0 ? historicalScores[0] : null;
+        let admitProbability = '未知';
+        let scoreGap = 0;
+        let rankGap: number | null = null;
+
+        if (latestScore && latestScore.as_minScore) {
+          scoreGap = score - latestScore.as_minScore;
+          rankGap = (latestScore.as_minRank && userRank) ? userRank - latestScore.as_minRank : null;
+
+          // 判断冲稳保
+          if (scoreGap < -10) {
+            admitProbability = '冲';
+          } else if (scoreGap >= -10 && scoreGap <= 10) {
+            admitProbability = '稳';
+          } else {
+            admitProbability = '保';
+          }
+        }
+
         return {
           id: plan.id,
           year: plan.year,
@@ -197,6 +225,11 @@ export class MajorFilterService {
           batch: plan.batch,
           collegeCode: plan.collegeCode,
           collegeName: plan.collegeName,
+          collegeProvince: plan.collegeProvince || null,
+          collegeCity: plan.collegeCity || null,
+          collegeIs985: plan.collegeIs985 || false,
+          collegeIs211: plan.collegeIs211 || false,
+          collegeIsWorldClass: plan.collegeIsWorldClass || false,
           majorGroupCode: plan.majorGroupCode || null,
           majorGroupName: plan.majorGroupName || null,
           majorCode: plan.majorCode,
@@ -206,6 +239,9 @@ export class MajorFilterService {
           tuition: plan.tuition || null,
           subjectRequirements: plan.subjectRequirements || null,
           majorRemarks: plan.majorRemarks || null,
+          admitProbability,
+          scoreGap,
+          rankGap,
           historicalScores: historicalScores.map(hs => ({
             year: hs.as_year,
             minScore: hs.as_minScore,
@@ -215,7 +251,7 @@ export class MajorFilterService {
       })
     );
 
-    // 5. 根据分数范围和往年录取情况筛选
+    // 6. 根据分数范围和往年录取情况筛选
     const filteredPlans = plansWithHistory.filter(plan => {
       // 如果没有历史录取数据，保留（可能是新专业）
       if (!plan.historicalScores || plan.historicalScores.length === 0) {
@@ -235,10 +271,37 @@ export class MajorFilterService {
 
     console.log(`✅ 经过分数筛选后，剩余${filteredPlans.length}条结果`);
 
+    // 7. 对结果排序：985/211院校优先，然后按院校名、专业名排序
+    const sortedPlans = filteredPlans.sort((a, b) => {
+      // 先按985/211排序
+      const a985211 = (a.collegeIs985 ? 2 : 0) + (a.collegeIs211 ? 1 : 0);
+      const b985211 = (b.collegeIs985 ? 2 : 0) + (b.collegeIs211 ? 1 : 0);
+
+      if (a985211 !== b985211) {
+        return b985211 - a985211; // 985/211排在前面
+      }
+
+      // 再按院校名排序
+      if (a.collegeName !== b.collegeName) {
+        return a.collegeName.localeCompare(b.collegeName, 'zh-CN');
+      }
+
+      // 最后按专业名排序
+      return a.majorName.localeCompare(b.majorName, 'zh-CN');
+    });
+
+    // 8. 应用分页
+    const total = sortedPlans.length;
+    const startIndex = (pageNum - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedPlans = sortedPlans.slice(startIndex, endIndex);
+
+    console.log(`📄 分页结果：第${pageNum}页，返回${paginatedPlans.length}条记录`);
+
     return {
-      list: filteredPlans,
+      list: paginatedPlans,
       userRank,
-      ...calculatePagination(filteredPlans.length, pageNum, pageSize)
+      ...calculatePagination(total, pageNum, pageSize)
     };
   }
 

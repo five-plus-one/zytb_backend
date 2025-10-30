@@ -44,6 +44,26 @@ export class EnrollmentPlan {
   @Column({ length: 100, name: 'college_name' })
   collegeName!: string;
 
+  // 院校省份（补全字段）
+  @Column({ length: 50, nullable: true, name: 'college_province' })
+  collegeProvince?: string;
+
+  // 院校城市（补全字段）
+  @Column({ length: 50, nullable: true, name: 'college_city' })
+  collegeCity?: string;
+
+  // 985标记（补全字段）
+  @Column({ type: 'boolean', default: false, name: 'college_is_985' })
+  collegeIs985!: boolean;
+
+  // 211标记（补全字段）
+  @Column({ type: 'boolean', default: false, name: 'college_is_211' })
+  collegeIs211!: boolean;
+
+  // 双一流标记（补全字段）
+  @Column({ type: 'boolean', default: false, name: 'college_is_world_class' })
+  collegeIsWorldClass!: boolean;
+
   // 院校专业组
   @Column({ length: 50, nullable: true, name: 'college_major_group_code' })
   collegeMajorGroupCode?: string;
