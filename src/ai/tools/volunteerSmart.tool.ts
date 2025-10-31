@@ -4,6 +4,7 @@ import { AppDataSource } from '../../config/database';
 import { EnrollmentPlan } from '../../models/EnrollmentPlan';
 import { AdmissionScore } from '../../models/AdmissionScore';
 import { BatchHelper } from '../utils/batchHelper';
+import { ConversationContextManager } from '../utils/conversationContext.manager';
 
 /**
  * 智能添加院校到志愿表工具
@@ -53,6 +54,7 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
   private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
   private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
   private batchHelper = new BatchHelper();
+  private contextManager = ConversationContextManager.getInstance();
 
   async execute(
     params: Record<string, any>,
@@ -60,6 +62,28 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
   ): Promise<ToolExecutionResult> {
     try {
       this.validateParams(params);
+
+      // ===== 新增: 参数校验和自动补全 =====
+      const sessionId = context?.sessionId || 'default';
+
+      // 1. 校验参数一致性
+      const validation = this.contextManager.validateToolParams(sessionId, this.name, params);
+      if (!validation.valid && validation.correctedParams) {
+        // 自动纠正参数
+        params = validation.correctedParams;
+        console.warn(`[ConversationContext] ${validation.error}`);
+      }
+
+      // 2. 自动补全参数
+      params = this.contextManager.enrichToolParams(sessionId, this.name, params);
+
+      // 3. 记录查询信息到上下文
+      if (params.collegeName || params.collegeCode) {
+        this.contextManager.recordQueriedColleges(sessionId, [{
+          collegeCode: params.collegeCode || '',
+          collegeName: params.collegeName || ''
+        }]);
+      }
 
       if (!params.collegeCode && !params.collegeName) {
         return {
@@ -78,6 +102,9 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
           const batchInfo = await this.batchHelper.ensureBatchExists(context);
           batchId = batchInfo.batchId;
           isNewBatch = batchInfo.isNewBatch;
+
+          // 记录批次ID到上下文
+          this.contextManager.recordCurrentBatch(sessionId, batchId);
         } catch (error: any) {
           // 如果用户没有批次且无法自动创建,返回友好错误
           return {
@@ -92,6 +119,15 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
       }
 
       const batch = await this.volunteerService.getBatchDetail(batchId);
+
+      // 更新用户档案
+      this.contextManager.updateUserProfile(sessionId, {
+        score: batch.score,
+        rank: batch.rank,
+        province: batch.province,
+        category: batch.subjectType,
+        year: batch.year
+      });
 
       // 2. 查询该院校的所有招生计划
       let queryBuilder = this.enrollmentPlanRepository
@@ -282,13 +318,13 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
  */
 export class AddGroupsBatchTool extends Tool {
   name = 'add_groups_batch';
-  description = '批量添加多个专业组：一次性添加多个院校的专业组到志愿表。适合用于快速构建志愿表或导入推荐方案。每个专业组需要提供院校代码和专业组代码。适用场景："把这5个专业组都加到志愿表""批量导入推荐的志愿方案"';
+  description = '批量添加多个专业组：一次性添加多个专业组到志愿表。自动处理批次、自动计算排序位置、自动查询补全信息。适用场景："把河海大学的04和05专业组加入志愿表""添加这几个专业组"。注意：如果只知道院校名称，建议使用add_college_to_volunteers_smart工具。';
 
   parameters: Record<string, ToolParameter> = {
     batchId: {
       type: 'string',
-      description: '志愿批次ID',
-      required: true
+      description: '志愿批次ID（可选，不提供则使用当前批次或自动创建）',
+      required: false  // ← 改为可选
     },
     groups: {
       type: 'array',
@@ -296,7 +332,7 @@ export class AddGroupsBatchTool extends Tool {
       required: true,
       items: {
         type: 'object',
-        description: '专业组信息(collegeCode, groupCode, groupOrder)'
+        description: '专业组信息：必须包含collegeCode和groupCode，其他字段可选（collegeName、groupOrder等）'
       }
     }
   };
@@ -304,6 +340,7 @@ export class AddGroupsBatchTool extends Tool {
   private volunteerService = new VolunteerManagementService();
   private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
   private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
+  private batchHelper = new BatchHelper();
 
   async execute(
     params: Record<string, any>,
@@ -319,30 +356,82 @@ export class AddGroupsBatchTool extends Tool {
         };
       }
 
-      const batch = await this.volunteerService.getBatchDetail(params.batchId);
+      // 1. 获取或创建批次
+      let batchId = params.batchId;
+      let isNewBatch = false;
+
+      if (!batchId) {
+        try {
+          const batchInfo = await this.batchHelper.ensureBatchExists(context);
+          batchId = batchInfo.batchId;
+          isNewBatch = batchInfo.isNewBatch;
+        } catch (error: any) {
+          return {
+            success: false,
+            error: error.message,
+            data: {
+              needBatchCreation: true,
+              suggestion: '请先告诉我您的基本信息（年份、省份、科类、分数、位次），我会自动为您创建志愿批次'
+            }
+          };
+        }
+      }
+
+      const batch = await this.volunteerService.getBatchDetail(batchId);
+
+      // 2. 计算起始排序位置
+      const existingGroups = batch.groups || [];
+      let currentOrder = 0;
+
+      if (existingGroups.length > 0) {
+        const maxOrder = Math.max(...existingGroups.map((g: any) => g.groupOrder));
+        currentOrder = maxOrder + 1;
+      } else {
+        currentOrder = 1;  // 从1开始
+      }
+
       const addedGroups = [];
       const errors = [];
 
-      for (const groupInput of params.groups) {
+      for (let i = 0; i < params.groups.length; i++) {
+        const groupInput = params.groups[i];
+
         try {
-          // 查询专业组详情
-          const plans = await this.enrollmentPlanRepository
+          // 验证必填字段
+          if (!groupInput.collegeCode && !groupInput.collegeName) {
+            errors.push(`第${i + 1}个专业组: 缺少院校代码或院校名称`);
+            continue;
+          }
+
+          if (!groupInput.groupCode) {
+            errors.push(`第${i + 1}个专业组: 缺少专业组代码`);
+            continue;
+          }
+
+          // 3. 查询专业组详情
+          let queryBuilder = this.enrollmentPlanRepository
             .createQueryBuilder('ep')
             .where('ep.year = :year', { year: batch.year })
             .andWhere('ep.sourceProvince = :sourceProvince', { sourceProvince: batch.province })
             .andWhere('ep.subjectType = :subjectType', { subjectType: batch.subjectType })
-            .andWhere('ep.collegeCode = :collegeCode', { collegeCode: groupInput.collegeCode })
-            .andWhere('ep.majorGroupCode = :groupCode', { groupCode: groupInput.groupCode })
-            .getMany();
+            .andWhere('ep.majorGroupCode = :groupCode', { groupCode: groupInput.groupCode });
+
+          if (groupInput.collegeCode) {
+            queryBuilder.andWhere('ep.collegeCode = :collegeCode', { collegeCode: groupInput.collegeCode });
+          } else if (groupInput.collegeName) {
+            queryBuilder.andWhere('ep.collegeName LIKE :collegeName', { collegeName: `%${groupInput.collegeName}%` });
+          }
+
+          const plans = await queryBuilder.getMany();
 
           if (plans.length === 0) {
-            errors.push(`未找到专业组: ${groupInput.collegeCode}-${groupInput.groupCode}`);
+            errors.push(`第${i + 1}个专业组: 未找到 ${groupInput.collegeName || groupInput.collegeCode} 的 ${groupInput.groupCode} 专业组`);
             continue;
           }
 
           const firstPlan = plans[0];
 
-          // 查询历年录取分数
+          // 4. 查询历年录取分数
           const historicalScores = await this.admissionScoreRepository
             .createQueryBuilder('as')
             .where('as.collegeName = :collegeName', { collegeName: firstPlan.collegeName })
@@ -359,10 +448,13 @@ export class AddGroupsBatchTool extends Tool {
             admitProbability = scoreGap < -10 ? '冲' : scoreGap <= 10 ? '稳' : '保';
           }
 
-          // 添加专业组
+          // 5. 确定groupOrder（用户提供的优先，否则自动递增）
+          const finalGroupOrder = groupInput.groupOrder || currentOrder;
+
+          // 6. 添加专业组
           const group = await this.volunteerService.addVolunteerGroup({
-            batchId: params.batchId,
-            groupOrder: groupInput.groupOrder,
+            batchId,
+            groupOrder: finalGroupOrder,
             collegeCode: firstPlan.collegeCode,
             collegeName: firstPlan.collegeName,
             groupCode: firstPlan.majorGroupCode || '',
@@ -370,11 +462,11 @@ export class AddGroupsBatchTool extends Tool {
             subjectRequirement: firstPlan.subjectRequirements,
             isObeyAdjustment: groupInput.isObeyAdjustment !== false,
             admitProbability,
-            lastYearMinScore: historicalScores?.minScore,
-            lastYearMinRank: historicalScores?.minRank
+            lastYearMinScore: historicalScores?.minScore || undefined,
+            lastYearMinRank: historicalScores?.minRank || undefined
           });
 
-          // 自动填充专业
+          // 7. 自动填充专业（按招生计划数排序，取前6个）
           const topMajors = plans
             .sort((a, b) => b.planCount - a.planCount)
             .slice(0, 6);
@@ -388,23 +480,47 @@ export class AddGroupsBatchTool extends Tool {
               majorName: plan.majorName,
               planCount: plan.planCount,
               tuitionFee: plan.tuition,
-              duration: plan.studyYears
+              duration: plan.studyYears,
+              majorDirection: undefined,
+              remarks: plan.majorRemarks
             });
           }
 
-          addedGroups.push(group);
+          addedGroups.push({
+            ...group,
+            majorCount: topMajors.length,
+            admitProbability
+          });
+
+          // 只有在使用自动order时才递增
+          if (!groupInput.groupOrder) {
+            currentOrder++;
+          }
+
         } catch (error: any) {
-          errors.push(`添加失败: ${groupInput.collegeCode}-${groupInput.groupCode}: ${error.message}`);
+          errors.push(`第${i + 1}个专业组添加失败: ${error.message}`);
         }
       }
 
+      // 构建返回消息
+      let message = `成功添加${addedGroups.length}个专业组到志愿表`;
+      if (isNewBatch) {
+        message = `已自动创建志愿批次，并${message}`;
+      }
+      if (addedGroups.length > 0) {
+        const positions = addedGroups.map(g => `第${g.groupOrder}位`).join('、');
+        message += `（${positions}）`;
+      }
+
       return {
-        success: true,
+        success: addedGroups.length > 0,
         data: {
           addedCount: addedGroups.length,
           totalCount: params.groups.length,
           groups: addedGroups,
-          errors: errors.length > 0 ? errors : undefined
+          errors: errors.length > 0 ? errors : undefined,
+          message,
+          isNewBatch
         },
         metadata: {
           dataSource: 'enrollment_plans + admission_scores + volunteer_groups + volunteer_majors',

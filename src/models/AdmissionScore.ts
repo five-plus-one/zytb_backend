@@ -59,6 +59,44 @@ export class AdmissionScore {
   @Column({ type: 'int', nullable: true, name: 'min_rank' })
   minRank?: number;
 
+  // ===== 新增：更完整的历史数据 =====
+  // 平均分
+  @Column({ type: 'int', nullable: true, name: 'avg_score' })
+  avgScore?: number;
+
+  // 最高分
+  @Column({ type: 'int', nullable: true, name: 'max_score' })
+  maxScore?: number;
+
+  // 最高位次
+  @Column({ type: 'int', nullable: true, name: 'max_rank' })
+  maxRank?: number;
+
+  // 招生计划数
+  @Column({ type: 'int', nullable: true, name: 'plan_count' })
+  planCount?: number;
+
+  // ===== 新增：辅助计算字段（可预计算，不依赖用户）=====
+  // 分数波动性（标准差）
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'score_volatility' })
+  scoreVolatility?: number;
+
+  // 专业热度指数 (0-100)
+  @Column({ type: 'int', nullable: true, name: 'popularity_index' })
+  popularityIndex?: number;
+
+  // 院校代码
+  @Column({ length: 20, nullable: true, name: 'college_code' })
+  collegeCode?: string;
+
+  // 专业组代码
+  @Column({ length: 50, nullable: true, name: 'group_code' })
+  groupCode?: string;
+
+  // 专业组名称
+  @Column({ length: 100, nullable: true, name: 'group_name' })
+  groupName?: string;
+
   // 批次
   @Column({ length: 50, nullable: true })
   batch?: string;

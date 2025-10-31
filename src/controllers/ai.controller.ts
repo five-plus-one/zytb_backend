@@ -31,7 +31,8 @@ export class AIController {
       const response = await agentService.chat(
         message,
         session.messages,
-        userId || session.userId
+        userId || session.userId,
+        session.sessionId
       );
 
       // 更新会话历史
@@ -86,7 +87,8 @@ export class AIController {
       const stream = agentService.chatStream(
         message,
         session.messages,
-        userId || session.userId
+        userId || session.userId,
+        session.sessionId
       );
 
       for await (const chunk of stream) {

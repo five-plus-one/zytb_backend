@@ -1,5 +1,6 @@
 import { Tool, ToolParameter, ToolExecutionContext, ToolExecutionResult } from './base';
 import { UserProfileManager } from '../userProfile.manager';
+import { ConversationContextManager } from '../utils/conversationContext.manager';
 
 /**
  * 设置用户基本信息工具
@@ -37,6 +38,7 @@ export class SetUserProfileTool extends Tool {
   };
 
   private profileManager = UserProfileManager.getInstance();
+  private contextManager = ConversationContextManager.getInstance();
 
   async execute(
     params: Record<string, any>,
@@ -44,8 +46,9 @@ export class SetUserProfileTool extends Tool {
   ): Promise<ToolExecutionResult> {
     try {
       const userId = this.getUserId(context);
+      const sessionId = context?.sessionId || 'default';
 
-      // 更新用户配置
+      // 更新用户配置 (UserProfileManager - 使用 userId 作为 key)
       const profile = this.profileManager.updateProfile(userId, {
         year: params.year,
         province: params.province,
@@ -53,6 +56,21 @@ export class SetUserProfileTool extends Tool {
         score: params.score,
         rank: params.rank
       });
+
+      // 同时更新 ConversationContextManager (使用 sessionId 作为 key)
+      // 这样 smart_recommendation 工具就能读取到数据
+      this.contextManager.updateUserProfile(sessionId, {
+        score: params.score,
+        rank: params.rank,
+        province: params.province,
+        category: params.subjectType,
+        year: params.year,
+        preferences: {}
+      });
+
+      console.log(`✅ 用户信息已同步到两个管理器:`);
+      console.log(`   - UserProfileManager [userId=${userId}]`);
+      console.log(`   - ConversationContextManager [sessionId=${sessionId}]`);
 
       return {
         success: true,

@@ -198,6 +198,44 @@ export class AIAgentService {
   * 位次数据：2025年
 - 核心功能：等位分查询、位次分数转换、专业筛选、院校历史统计、招生计划查询、志愿表管理
 
+## 智能推荐工具使用规范（重要！）
+
+### smart_recommendation 工具说明
+核心能力：一次调用返回完整的冲稳保推荐，包含：
+- 40个精选专业组（冲12 + 稳20 + 保8）
+- 每个专业组的录取概率和冲稳保分类
+- 完整历年录取数据（近3-5年的最低分、平均分、最高分、位次、招生计划）
+- 调剂风险评估和推荐理由
+
+❌ 错误用法：
+用户: "给我推荐计算机专业"
+AI: 调用 smart_recommendation
+    → 得到完整推荐列表（已包含历年数据）
+    → 再次调用 query_college_stats 查询历史数据（冗余！错误！）
+
+✅ 正确用法：
+用户: "给我推荐计算机专业"
+AI: 调用 smart_recommendation（一次即可）
+    → 直接展示推荐结果和历年数据
+    → 无需额外调用 query_college_stats
+
+### query_college_stats 工具说明
+用途：深度分析单个院校的历史趋势
+使用场景：
+- 用户明确要求查看某个院校的详细历史
+- 需要查看更长时间跨度（如近10年数据）
+- 需要单独分析某个院校的录取趋势
+
+❌ 不要用于：
+- 批量查询多个院校的历史数据（应该用 smart_recommendation）
+- 在 smart_recommendation 之后重复查询（数据已包含在推荐结果中）
+
+### 工具选择决策树
+1. 用户要求推荐院校/专业 → 使用 smart_recommendation（一次性返回所有数据）
+2. 用户要深入了解某个特定院校 → 使用 query_college_stats
+3. 用户要查看某个院校的专业组结构 → 使用 query_enrollment_by_college
+4. 用户要筛选特定条件的专业 → 使用 filter_majors
+
 ## 志愿表管理能力
 - 查询志愿表：查看用户当前填报的志愿（40个专业组，每组6个专业）
 - 添加志愿：向志愿表添加专业组和专业
@@ -233,7 +271,8 @@ export class AIAgentService {
   async chat(
     userMessage: string,
     conversationHistory: Message[] = [],
-    userId?: string
+    userId?: string,
+    sessionId?: string
   ): Promise<AgentResponse> {
     const startTime = Date.now();
     let iterationsCount = 0;
@@ -328,6 +367,7 @@ export class AIAgentService {
                 toolParams,
                 {
                   userId,
+                  sessionId,
                   timestamp: Date.now()
                 }
               );
@@ -402,7 +442,8 @@ export class AIAgentService {
   async *chatStream(
     userMessage: string,
     conversationHistory: Message[] = [],
-    userId?: string
+    userId?: string,
+    sessionId?: string
   ): AsyncGenerator<string | AgentResponse, void, unknown> {
     const maxIterations = 10;
     let iterationCount = 0;
@@ -560,6 +601,7 @@ export class AIAgentService {
 
             const result = await this.toolRegistry.execute(toolName, toolParams, {
               userId,
+              sessionId,
               timestamp: Date.now()
             });
 

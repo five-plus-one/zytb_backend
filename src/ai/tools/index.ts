@@ -49,6 +49,9 @@ import {
   SetUserProfileTool,
   GetUserProfileTool
 } from './userProfile.tool';
+import {
+  SmartRecommendationTool
+} from './smartRecommendation.tool';
 
 /**
  * 初始化所有工具
@@ -104,6 +107,9 @@ export function initializeTools(): void {
   // 注册用户配置管理工具(新增)
   registry.register(new SetUserProfileTool());
   registry.register(new GetUserProfileTool());
+
+  // 🎯 注册智能推荐工具(核心功能)
+  registry.register(new SmartRecommendationTool());
 
   console.log(`\n🔧 AI工具系统初始化完成`);
   console.log(`📊 已注册 ${registry.getAllNames().length} 个工具:`);
