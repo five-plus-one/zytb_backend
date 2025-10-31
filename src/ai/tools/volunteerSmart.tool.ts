@@ -3,19 +3,20 @@ import { VolunteerManagementService } from '../../services/volunteerManagement.s
 import { AppDataSource } from '../../config/database';
 import { EnrollmentPlan } from '../../models/EnrollmentPlan';
 import { AdmissionScore } from '../../models/AdmissionScore';
+import { BatchHelper } from '../utils/batchHelper';
 
 /**
  * 智能添加院校到志愿表工具
  */
 export class AddCollegeToVolunteersSmartTool extends Tool {
   name = 'add_college_to_volunteers_smart';
-  description = '智能添加院校到志愿表：根据院校代码或名称，自动查询该院校的所有专业组信息并添加到志愿表。可以选择添加全部专业组或指定的专业组。自动查询历年录取分数、判断冲稳保、补全所有必要字段，无需手动传递大量参数。适用场景："把苏州大学加入我的志愿表""添加河海大学的04和05专业组""把这个学校加到第10位开始"';
+  description = '智能添加院校到志愿表：根据院校代码或名称，自动查询该院校的所有专业组信息并添加到志愿表。可以选择添加全部专业组或指定的专业组。自动查询历年录取分数、判断冲稳保、补全所有必要字段，无需手动传递大量参数。如果用户尚未创建志愿批次,系统会提示需要的信息。适用场景："把苏州大学加入我的志愿表""添加河海大学的04和05专业组""把这个学校加到第10位开始"';
 
   parameters: Record<string, ToolParameter> = {
     batchId: {
       type: 'string',
-      description: '志愿批次ID',
-      required: true
+      description: '志愿批次ID（可选，如果不提供则使用用户的当前批次或自动创建）',
+      required: false
     },
     collegeCode: {
       type: 'string',
@@ -51,6 +52,7 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
   private volunteerService = new VolunteerManagementService();
   private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
   private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
+  private batchHelper = new BatchHelper();
 
   async execute(
     params: Record<string, any>,
@@ -66,8 +68,30 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
         };
       }
 
-      // 1. 获取批次信息
-      const batch = await this.volunteerService.getBatchDetail(params.batchId);
+      // 1. 获取或查找批次信息
+      let batchId = params.batchId;
+      let isNewBatch = false;
+
+      if (!batchId) {
+        // 尝试获取用户现有的批次
+        try {
+          const batchInfo = await this.batchHelper.ensureBatchExists(context);
+          batchId = batchInfo.batchId;
+          isNewBatch = batchInfo.isNewBatch;
+        } catch (error: any) {
+          // 如果用户没有批次且无法自动创建,返回友好错误
+          return {
+            success: false,
+            error: error.message,
+            data: {
+              needBatchCreation: true,
+              suggestion: '请先告诉我您的基本信息（年份、省份、科类、分数、位次），或使用 create_volunteer_batch 工具创建批次'
+            }
+          };
+        }
+      }
+
+      const batch = await this.volunteerService.getBatchDetail(batchId);
 
       // 2. 查询该院校的所有招生计划
       let queryBuilder = this.enrollmentPlanRepository

@@ -1,5 +1,6 @@
 import { AppDataSource } from '../config/database';
 import { VolunteerBatch, VolunteerGroup, VolunteerMajor } from '../models/VolunteerNew';
+import { User } from '../models/User';
 import { Repository } from 'typeorm';
 
 export class VolunteerManagementService {
@@ -76,6 +77,17 @@ export class VolunteerManagementService {
     score: number;
     rank?: number;
   }) {
+    // 验证用户是否存在
+    const userRepo = AppDataSource.getRepository(User);
+    const userExists = await userRepo
+      .createQueryBuilder('user')
+      .where('user.id = :userId', { userId: data.userId })
+      .getCount();
+
+    if (userExists === 0) {
+      throw new Error('用户不存在或未登录，请先登录后再创建志愿批次');
+    }
+
     const batch = this.batchRepo.create(data);
     return await this.batchRepo.save(batch);
   }

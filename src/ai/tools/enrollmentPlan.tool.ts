@@ -126,6 +126,33 @@ export class EnrollmentPlanByCollegeTool extends Tool {
         params.collegeName
       );
 
+      // 检查是否返回空结果
+      if (!result || result.length === 0) {
+        return {
+          success: false,
+          error: `未找到"${params.collegeName}"在${params.year}年${params.sourceProvince}${params.subjectType}类的招生计划`,
+          data: {
+            queriedCollegeName: params.collegeName,
+            suggestions: [
+              '可能原因：',
+              '1. 院校名称拼写有误，请检查院校全称（如"南京大学"而非"南大"）',
+              '2. 该院校今年可能不在当前省份招生',
+              '3. 数据库中暂未录入该院校的招生计划',
+              '',
+              '建议：',
+              '• 使用 query_suitable_colleges 查看所有可选院校',
+              '• 访问江苏省考试院官网查询最新招生计划',
+              '• 使用掌上高考、优志愿等平台进行交叉验证',
+              `• 尝试搜索院校的其他名称形式（如"中国人民大学(苏州校区)"）`
+            ]
+          },
+          metadata: {
+            dataSource: 'enrollment_plans',
+            description: '查询结果为空'
+          }
+        };
+      }
+
       return {
         success: true,
         data: result,

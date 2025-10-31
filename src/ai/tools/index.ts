@@ -45,6 +45,10 @@ import {
   AddCollegeToVolunteersSmartTool,
   AddGroupsBatchTool
 } from './volunteerSmart.tool';
+import {
+  SetUserProfileTool,
+  GetUserProfileTool
+} from './userProfile.tool';
 
 /**
  * 初始化所有工具
@@ -96,6 +100,10 @@ export function initializeTools(): void {
   // 注册智能志愿添加工具(新增)
   registry.register(new AddCollegeToVolunteersSmartTool());
   registry.register(new AddGroupsBatchTool());
+
+  // 注册用户配置管理工具(新增)
+  registry.register(new SetUserProfileTool());
+  registry.register(new GetUserProfileTool());
 
   console.log(`\n🔧 AI工具系统初始化完成`);
   console.log(`📊 已注册 ${registry.getAllNames().length} 个工具:`);

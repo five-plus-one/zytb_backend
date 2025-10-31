@@ -97,6 +97,17 @@ export abstract class Tool {
     }
     return true;
   }
+
+  /**
+   * 从context中获取userId
+   * 如果context中没有userId,抛出友好错误
+   */
+  protected getUserId(context?: ToolExecutionContext): string {
+    if (!context || !context.userId) {
+      throw new Error('用户未登录或会话已过期，请重新登录后再试');
+    }
+    return context.userId;
+  }
 }
 
 /**
