@@ -74,16 +74,26 @@ export class SmartRecommendationService {
         confidence: probResult.confidence,
         scoreGap: probResult.scoreGap,
         rankGap: probResult.rankGap,
-        recommendReasons
+        recommendReasons,
+        filtered: probResult.filtered,
+        filterReason: probResult.filterReason
       };
     });
 
-    console.log(`[SmartRecommendation] 计算完成，开始分类`);
+    // 过滤掉不合理的推荐
+    const validGroups = groupsWithProbability.filter(g => !g.filtered);
+    const filteredCount = groupsWithProbability.length - validGroups.length;
+
+    if (filteredCount > 0) {
+      console.log(`[SmartRecommendation] 已过滤 ${filteredCount} 个不合理的推荐`);
+    }
+
+    console.log(`[SmartRecommendation] 计算完成，有效专业组 ${validGroups.length} 个，开始分类`);
 
     // 第三步：按冲稳保分类
-    const rush = groupsWithProbability.filter(g => g.riskLevel === '冲');
-    const stable = groupsWithProbability.filter(g => g.riskLevel === '稳');
-    const safe = groupsWithProbability.filter(g => g.riskLevel === '保');
+    const rush = validGroups.filter(g => g.riskLevel === '冲');
+    const stable = validGroups.filter(g => g.riskLevel === '稳');
+    const safe = validGroups.filter(g => g.riskLevel === '保');
 
     console.log(`[SmartRecommendation] 分类结果: 冲=${rush.length}, 稳=${stable.length}, 保=${safe.length}`);
 

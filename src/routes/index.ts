@@ -14,6 +14,7 @@ import equivalentScoreRoutes from './equivalentScore.routes';
 import majorFilterRoutes from './majorFilter.routes';
 import enrollmentPlanDetailRoutes from './enrollmentPlanDetail.routes';
 import aiRoutes from './ai.routes';
+import structuredRecommendationRoutes from './structuredRecommendation.routes';
 
 const router = Router();
 
@@ -37,6 +38,9 @@ router.use('/enrollment-plan-detail', enrollmentPlanDetailRoutes); // 招生计�
 
 // AI Agent 路由
 router.use('/ai', aiRoutes);  // 智能AI助手
+
+// 结构化推荐 API
+router.use('/recommendations', structuredRecommendationRoutes);  // 结构化推荐接口
 
 // 健康检查接口
 router.get('/health', (req, res) => {

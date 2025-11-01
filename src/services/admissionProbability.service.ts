@@ -32,6 +32,8 @@ export interface ProbabilityResult {
   scoreGap: number;                 // 分数差距
   rankGap: number | null;           // 位次差距
   confidence: number;               // 置信度 0-100
+  filtered?: boolean;               // 是否被过滤（不合理的推荐）
+  filterReason?: string;            // 过滤原因
 }
 
 /**
@@ -235,60 +237,130 @@ export class AdmissionProbabilityService {
     // 限制在 0-100 范围内
     finalProbability = Math.max(0, Math.min(100, finalProbability));
 
-    // ===== 第十步：分类为冲稳保 =====
-
-    let riskLevel: '冲' | '稳' | '保';
-    let adjustmentRisk: '高' | '中' | '低';
-
-    if (finalProbability < 30) {
-      riskLevel = '冲';
-      adjustmentRisk = '高';
-    } else if (finalProbability < 35) {
-      riskLevel = '冲';
-      adjustmentRisk = '中';
-    } else if (finalProbability < 65) {
-      riskLevel = '稳';
-      if (finalProbability < 45) {
-        adjustmentRisk = '中';
-      } else if (finalProbability < 55) {
-        adjustmentRisk = '低';
-      } else {
-        adjustmentRisk = '低';
-      }
-    } else {
-      riskLevel = '保';
-      adjustmentRisk = '低';
-    }
-
-    // ===== 第十一步：计算置信度 =====
+    // ===== 第十步：计算置信度（需要在过滤前计算）=====
 
     let confidence = 100;
 
-    // 11.1 数据量不足降低置信度
+    // 10.1 数据量不足降低置信度
     if (groupHistory.length < 3) {
       confidence -= 20;
     } else if (groupHistory.length < 2) {
       confidence -= 40;
     }
 
-    // 11.2 波动性大降低置信度
+    // 10.2 波动性大降低置信度
     if (scoreVolatility > 10) {
       confidence -= 30;
     } else if (scoreVolatility > 5) {
       confidence -= 15;
     }
 
-    // 11.3 分数位次不一致降低置信度
+    // 10.3 分数位次不一致降低置信度
     if (!scoreRankConsistency) {
       confidence -= 10;
     }
 
-    // 11.4 计划数变化大降低置信度
+    // 10.4 计划数变化大降低置信度
     if (Math.abs(planChangeRate) > 0.3) {
       confidence -= 10;
     }
 
     confidence = Math.max(0, Math.min(100, confidence));
+
+    // ===== 第十一步：预过滤不合理的推荐 =====
+
+    // 11.1 分数差过大或过小（浪费志愿位）
+    if (scoreGap < -20) {
+      return {
+        probability: Math.round(finalProbability),
+        riskLevel: '冲',
+        adjustmentRisk: '高',
+        scoreGap: Math.round(scoreGap * 10) / 10,
+        rankGap: rankGap ? Math.round(rankGap) : null,
+        confidence: Math.round(confidence),
+        filtered: true,
+        filterReason: '分数差距过大（低于历史平均分20分以上），冲刺意义不大'
+      };
+    }
+
+    if (scoreGap > 15) {
+      return {
+        probability: Math.round(finalProbability),
+        riskLevel: '保',
+        adjustmentRisk: '低',
+        scoreGap: Math.round(scoreGap * 10) / 10,
+        rankGap: rankGap ? Math.round(rankGap) : null,
+        confidence: Math.round(confidence),
+        filtered: true,
+        filterReason: '分数差距过大（高于历史平均分15分以上），过于稳妥，浪费志愿位'
+      };
+    }
+
+    // 11.2 概率过低且分数差过大（无意义冲刺）
+    if (finalProbability < 5 && scoreGap < -15) {
+      return {
+        probability: Math.round(finalProbability),
+        riskLevel: '冲',
+        adjustmentRisk: '高',
+        scoreGap: Math.round(scoreGap * 10) / 10,
+        rankGap: rankGap ? Math.round(rankGap) : null,
+        confidence: Math.round(confidence),
+        filtered: true,
+        filterReason: '录取概率极低且分数差距大，冲刺风险极高'
+      };
+    }
+
+    // 11.3 概率过高（几乎保证录取，浪费志愿位）
+    if (finalProbability > 99) {
+      return {
+        probability: Math.round(finalProbability),
+        riskLevel: '保',
+        adjustmentRisk: '低',
+        scoreGap: Math.round(scoreGap * 10) / 10,
+        rankGap: rankGap ? Math.round(rankGap) : null,
+        confidence: Math.round(confidence),
+        filtered: true,
+        filterReason: '录取概率接近100%，过于保守，浪费志愿位'
+      };
+    }
+
+    // ===== 第十二步：分类为冲稳保（用户纠正后的标准）=====
+
+    /**
+     * 用户定义的冲稳保标准：
+     * - 冲: < 35% (有概率但不大，能上的话会很高兴)
+     * - 稳: 35-90% (正常应该落在这个区间，落不了说明志愿填报失败)
+     * - 保: 90-99% (保底覆盖)
+     */
+
+    let riskLevel: '冲' | '稳' | '保';
+    let adjustmentRisk: '高' | '中' | '低';
+
+    if (finalProbability < 35) {
+      // 冲一冲：概率不高但有可能
+      riskLevel = '冲';
+      if (finalProbability < 15) {
+        adjustmentRisk = '高';  // < 15% 风险很高
+      } else if (finalProbability < 25) {
+        adjustmentRisk = '中';  // 15-25% 风险中等
+      } else {
+        adjustmentRisk = '低';  // 25-35% 风险较低
+      }
+    } else if (finalProbability <= 90) {
+      // 稳一稳：正常应该落在这个区间
+      riskLevel = '稳';
+      if (finalProbability < 50) {
+        adjustmentRisk = '中';  // 35-50% 仍有一定风险
+      } else if (finalProbability < 70) {
+        adjustmentRisk = '低';  // 50-70% 较稳
+      } else {
+        adjustmentRisk = '低';  // 70-90% 很稳
+      }
+    } else {
+      // 保一保：保底覆盖（90-99%）
+      riskLevel = '保';
+      adjustmentRisk = '低';
+    }
 
     // ===== 返回结果 =====
 
