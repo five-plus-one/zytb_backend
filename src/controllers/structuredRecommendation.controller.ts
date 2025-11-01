@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { ResponseUtil } from '../utils/response';
 import { SmartRecommendationService } from '../services/smartRecommendation.service';
 import { StructuredDataTransformer } from '../services/structuredDataTransformer.service';
+import { GroupDetailService } from '../services/groupDetail.service';
+import { GroupComparisonService } from '../services/groupComparison.service';
 import { UserPreferences } from '../interfaces/recommendation.interface';
 import { ApiResponse, StructuredRecommendationResult } from '../types/structuredRecommendation';
 import * as ExcelJS from 'exceljs';
@@ -14,6 +16,8 @@ import * as ExcelJS from 'exceljs';
 export class StructuredRecommendationController {
   private recommendationService = new SmartRecommendationService();
   private transformer = new StructuredDataTransformer();
+  private detailService = new GroupDetailService();
+  private comparisonService = new GroupComparisonService();
 
   /**
    * 获取结构化推荐
@@ -243,45 +247,108 @@ export class StructuredRecommendationController {
   /**
    * 获取专业组详情
    * GET /api/recommendations/group/:groupId
+   * Query: ?score=620&rank=8500 (可选，用于计算录取概率)
    */
   async getGroupDetail(req: Request, res: Response) {
     try {
       const { groupId } = req.params;
+      const { score, rank } = req.query;
 
-      // TODO: 实现从数据库查询单个专业组详情的逻辑
-      // 这里暂时返回提示
-      return ResponseUtil.success(res, {
-        message: '此功能待实现',
-        groupId
+      console.log('[StructuredRecommendationController] 获取专业组详情:', {
+        groupId,
+        score,
+        rank
       });
+
+      // 构建用户信息（可选）
+      const userProfile = score && rank ? {
+        score: Number(score),
+        rank: Number(rank)
+      } : undefined;
+
+      // 获取详情
+      const detail = await this.detailService.getGroupDetail(groupId, userProfile);
+
+      const apiResponse: ApiResponse<any> = {
+        success: true,
+        data: detail,
+        timestamp: Date.now(),
+        requestId: this.generateRequestId()
+      };
+
+      return res.status(200).json(apiResponse);
 
     } catch (error: any) {
       console.error('[StructuredRecommendationController] 获取详情错误:', error);
-      return ResponseUtil.error(res, error.message);
+
+      const apiResponse: ApiResponse<any> = {
+        success: false,
+        error: {
+          code: 'GROUP_DETAIL_ERROR',
+          message: error.message || '获取专业组详情失败',
+          details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        },
+        timestamp: Date.now()
+      };
+
+      return res.status(500).json(apiResponse);
     }
   }
 
   /**
    * 对比多个专业组
    * POST /api/recommendations/compare
+   * Body: {
+   *   groupIds: string[],
+   *   userProfile?: { score: number, rank: number }
+   * }
    */
   async compareGroups(req: Request, res: Response) {
     try {
-      const { groupIds } = req.body;
+      const { groupIds, userProfile } = req.body;
 
       if (!groupIds || !Array.isArray(groupIds) || groupIds.length < 2) {
         return ResponseUtil.badRequest(res, '需要提供至少2个专业组ID进行对比');
       }
 
-      // TODO: 实现专业组对比逻辑
-      return ResponseUtil.success(res, {
-        message: '此功能待实现',
-        groupIds
+      if (groupIds.length > 5) {
+        return ResponseUtil.badRequest(res, '最多支持对比5个专业组');
+      }
+
+      console.log('[StructuredRecommendationController] 对比专业组:', {
+        groupIds,
+        hasUserProfile: !!userProfile
       });
+
+      // 执行对比
+      const comparisonResult = await this.comparisonService.compareGroups(
+        groupIds,
+        userProfile
+      );
+
+      const apiResponse: ApiResponse<any> = {
+        success: true,
+        data: comparisonResult,
+        timestamp: Date.now(),
+        requestId: this.generateRequestId()
+      };
+
+      return res.status(200).json(apiResponse);
 
     } catch (error: any) {
       console.error('[StructuredRecommendationController] 对比错误:', error);
-      return ResponseUtil.error(res, error.message);
+
+      const apiResponse: ApiResponse<any> = {
+        success: false,
+        error: {
+          code: 'GROUP_COMPARISON_ERROR',
+          message: error.message || '专业组对比失败',
+          details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        },
+        timestamp: Date.now()
+      };
+
+      return res.status(500).json(apiResponse);
     }
   }
 
