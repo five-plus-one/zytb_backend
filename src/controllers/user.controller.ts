@@ -22,6 +22,7 @@ export class UserController {
 
       ResponseUtil.success(res, result, '注册成功');
     } catch (error: any) {
+      console.error('Register error:', error);
       ResponseUtil.error(res, error.message);
     }
   }
@@ -35,6 +36,7 @@ export class UserController {
 
       ResponseUtil.success(res, result, '登录成功');
     } catch (error: any) {
+      console.error('Login error:', error);
       ResponseUtil.error(res, error.message);
     }
   }

@@ -35,12 +35,14 @@ export class AuthUtil {
   }
 
   // 脱敏手机号
-  static maskPhone(phone: string): string {
+  static maskPhone(phone: string | undefined | null): string {
+    if (!phone) return '';
     return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
   }
 
   // 脱敏身份证号
-  static maskIdCard(idCard: string): string {
+  static maskIdCard(idCard: string | undefined | null): string {
+    if (!idCard) return '';
     return idCard.replace(/(\d{6})\d{8}(\d{4})/, '$1********$2');
   }
 }

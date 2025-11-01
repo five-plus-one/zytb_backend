@@ -8,6 +8,13 @@ export class UserService {
 
   // 用户注册
   async register(data: UserRegisterDto) {
+    console.log('Register data:', JSON.stringify(data, null, 2));
+
+    // 检查必填字段
+    if (!data.username || !data.password || !data.phone) {
+      throw new Error('用户名、密码和手机号为必填项');
+    }
+
     // 检查用户名是否存在
     const existingUser = await this.userRepository.findOne({
       where: { username: data.username }
@@ -17,11 +24,13 @@ export class UserService {
     }
 
     // 检查手机号是否已注册
-    const existingPhone = await this.userRepository.findOne({
-      where: { phone: data.phone }
-    });
-    if (existingPhone) {
-      throw new Error('手机号已注册');
+    if (data.phone) {
+      const existingPhone = await this.userRepository.findOne({
+        where: { phone: data.phone }
+      });
+      if (existingPhone) {
+        throw new Error('手机号已注册');
+      }
     }
 
     // 加密密码
@@ -31,12 +40,14 @@ export class UserService {
     const user = this.userRepository.create({
       username: data.username,
       password: hashedPassword,
-      nickname: data.nickname,
+      nickname: data.nickname || data.username,
       phone: data.phone,
       email: data.email
     });
 
+    console.log('Saving user:', JSON.stringify(user, null, 2));
     await this.userRepository.save(user);
+    console.log('User saved successfully, id:', user.id);
 
     // 生成 token
     const token = AuthUtil.generateToken({
@@ -53,6 +64,8 @@ export class UserService {
 
   // 用户登录
   async login(data: UserLoginDto) {
+    console.log('Login data:', JSON.stringify(data, null, 2));
+
     // 查找用户(支持用户名或手机号登录)
     const user = await this.userRepository
       .createQueryBuilder('user')
@@ -60,6 +73,8 @@ export class UserService {
         username: data.username
       })
       .getOne();
+
+    console.log('Found user:', user ? user.id : 'null');
 
     if (!user) {
       throw new Error('用户名或密码错误');
@@ -70,6 +85,8 @@ export class UserService {
       data.password,
       user.password
     );
+    console.log('Password valid:', isPasswordValid);
+
     if (!isPasswordValid) {
       throw new Error('用户名或密码错误');
     }
@@ -80,7 +97,8 @@ export class UserService {
       username: user.username
     });
 
-    return {
+    console.log('Generating response...');
+    const response = {
       userId: user.id,
       username: user.username,
       nickname: user.nickname,
@@ -90,6 +108,9 @@ export class UserService {
       token,
       tokenExpire: Date.now() + 7 * 24 * 60 * 60 * 1000
     };
+    console.log('Response generated successfully');
+
+    return response;
   }
 
   // 获取用户信息
