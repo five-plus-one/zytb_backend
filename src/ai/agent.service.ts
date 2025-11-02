@@ -12,6 +12,7 @@ import OpenAI from 'openai';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { ToolRegistry, ToolDefinition } from './tools';
 import config from '../config';
+import { RecommendationCardFormatter } from './utils/recommendationCardFormatter';
 
 export interface Message {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -207,6 +208,33 @@ export class AIAgentService {
 - 完整历年录取数据（近3-5年的最低分、平均分、最高分、位次、招生计划）
 - 调剂风险评估和推荐理由
 
+### 推荐卡片输出格式（重要！必读！）
+当调用 smart_recommendation 工具后，系统会自动将结果转换为前端可渲染的推荐卡片格式。
+
+**✅ 正确输出方式：**
+1. 调用 smart_recommendation 工具
+2. 系统返回的结果中包含 formattedCards 字段
+3. **直接将 formattedCards 的内容原样输出给用户**
+4. 不要对卡片数据进行二次描述或修改
+
+**示例流程：**
+- 用户: "我想学计算机专业"
+- AI: 调用 smart_recommendation 工具
+- 系统: 返回包含 formattedCards 的结果
+- AI: 直接输出 formattedCards 的内容，包含所有推荐卡片代码块
+
+**❌ 错误做法：**
+- 不要自己编写推荐卡片的 JSON
+- 不要修改或简化卡片数据
+- 不要用表格或列表替代卡片格式
+- 不要重复描述卡片中已有的信息
+
+**推荐卡片的作用：**
+- 前端会自动检测推荐卡片代码块
+- 渲染为可交互的可视化卡片
+- 用户可以点击查看详情、一键加入志愿表、继续询问
+
+
 ### 冲稳保分类标准（重要！必读！）
 系统使用以下标准对推荐进行分类：
 
@@ -241,7 +269,7 @@ AI: 调用 smart_recommendation
 ✅ 正确用法：
 用户: "给我推荐计算机专业"
 AI: 调用 smart_recommendation（一次即可）
-    → 直接展示推荐结果和历年数据
+    → 直接输出 formattedCards 内容
     → 无需额外调用 query_college_stats
 
 ### query_college_stats 工具说明
@@ -399,12 +427,29 @@ AI: 调用 smart_recommendation（一次即可）
 
               console.log(`✅ 工具执行完成:`, result.success ? '成功' : '失败');
 
+              // 如果是智能推荐工具且执行成功，将结果转换为推荐卡片格式
+              let contentToAdd = JSON.stringify(result);
+              if (toolName === 'smart_recommendation' && result.success && result.data) {
+                try {
+                  console.log('🎨 检测到智能推荐结果，转换为推荐卡片格式...');
+                  const formattedResult = this.formatRecommendationCards(result.data);
+                  contentToAdd = JSON.stringify({
+                    ...result,
+                    formattedCards: formattedResult,
+                    hint: '请将 formattedCards 的内容直接输出给用户，不要重复描述数据'
+                  });
+                } catch (formatError: any) {
+                  console.error('❌ 推荐卡片格式化失败:', formatError.message);
+                  // 格式化失败，使用原始JSON
+                }
+              }
+
               // 将工具结果添加到消息历史
               messages.push({
                 role: 'tool',
                 tool_call_id: toolCall.id,
                 name: toolName,
-                content: JSON.stringify(result)
+                content: contentToAdd
               });
 
               return {
@@ -632,12 +677,29 @@ AI: 调用 smart_recommendation（一次即可）
 
             console.log(`✅ 工具执行完成:`, result.success ? '成功' : '失败');
 
+            // 如果是智能推荐工具且执行成功，将结果转换为推荐卡片格式
+            let contentToAdd = JSON.stringify(result);
+            if (toolName === 'smart_recommendation' && result.success && result.data) {
+              try {
+                console.log('🎨 检测到智能推荐结果，转换为推荐卡片格式...');
+                const formattedResult = this.formatRecommendationCards(result.data);
+                contentToAdd = JSON.stringify({
+                  ...result,
+                  formattedCards: formattedResult,
+                  hint: '请将 formattedCards 的内容直接输出给用户，不要重复描述数据'
+                });
+              } catch (formatError: any) {
+                console.error('❌ 推荐卡片格式化失败:', formatError.message);
+                // 格式化失败，使用原始JSON
+              }
+            }
+
             // 将工具结果添加到消息历史
             messages.push({
               role: 'tool',
               tool_call_id: toolCall.id,
               name: toolName,
-              content: JSON.stringify(result)
+              content: contentToAdd
             } as any);
 
             // 通知前端工具执行完成
@@ -681,6 +743,22 @@ AI: 调用 smart_recommendation（一次即可）
         metadata: {}
       } as AgentResponse;
     }
+  }
+
+  /**
+   * 格式化智能推荐结果为推荐卡片格式
+   */
+  private formatRecommendationCards(data: any): string {
+    if (!data.rush && !data.stable && !data.safe) {
+      return ''; // 不是推荐结果，跳过
+    }
+
+    return RecommendationCardFormatter.formatFullRecommendation({
+      rush: data.rush || [],
+      stable: data.stable || [],
+      safe: data.safe || [],
+      summary: data.summary
+    });
   }
 
   /**
