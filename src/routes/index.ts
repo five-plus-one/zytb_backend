@@ -15,6 +15,8 @@ import majorFilterRoutes from './majorFilter.routes';
 import enrollmentPlanDetailRoutes from './enrollmentPlanDetail.routes';
 import aiRoutes from './ai.routes';
 import structuredRecommendationRoutes from './structuredRecommendation.routes';
+import enrollmentPlanGroupRoutes from './enrollmentPlanGroup.routes';
+import enrollmentPlanSearchRoutes from './enrollmentPlanSearch.routes';
 
 const router = Router();
 
@@ -25,6 +27,7 @@ router.use('/major', majorRoutes);
 router.use('/volunteer', volunteerRoutes);
 router.use('/system', systemRoutes);
 router.use('/enrollment-plan', enrollmentPlanRoutes);
+router.use('/enrollment-plan', enrollmentPlanSearchRoutes); // 搜索路由
 router.use('/admission-score', admissionScoreRoutes);
 router.use('/score-ranking', scoreRankingRoutes);
 router.use('/agent', agentRoutes);
@@ -35,6 +38,7 @@ router.use('/diagnostic', diagnosticRoutes);
 router.use('/equivalent-score', equivalentScoreRoutes);  // 等位分查询
 router.use('/major-filter', majorFilterRoutes);          // 专业筛选
 router.use('/enrollment-plan-detail', enrollmentPlanDetailRoutes); // 招生计划详情
+router.use('/groups', enrollmentPlanGroupRoutes);        // 专业组查询（包含历年分数）
 
 // AI Agent 路由
 router.use('/ai', aiRoutes);  // 智能AI助手
@@ -51,3 +55,5 @@ router.get('/health', (req, res) => {
 });
 
 export default router;
+import adminRoutes from './admin.routes';
+router.use('/admin', adminRoutes);

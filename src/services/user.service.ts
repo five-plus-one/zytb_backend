@@ -186,4 +186,89 @@ export class UserService {
     user.password = await AuthUtil.hashPassword(newPassword);
     await this.userRepository.save(user);
   }
+
+  // 更新用户Profile
+  async updateProfile(userId: string, data: any) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    Object.assign(user, data);
+    await this.userRepository.save(user);
+
+    return {
+      examYear: user.examYear,
+      examScore: user.examScore,
+      examRank: user.examRank,
+      subjectType: user.subjectType,
+      selectedSubjects: user.selectedSubjects,
+      preferences: user.preferences
+    };
+  }
+
+  // 管理员：获取用户列表
+  async getUserList(params: any) {
+    const { page, pageSize, keyword, role, status } = params;
+
+    const queryBuilder = this.userRepository.createQueryBuilder('user');
+
+    if (keyword) {
+      queryBuilder.andWhere(
+        '(user.username LIKE :keyword OR user.nickname LIKE :keyword OR user.phone LIKE :keyword)',
+        { keyword: `%${keyword}%` }
+      );
+    }
+
+    if (role) {
+      queryBuilder.andWhere('user.role = :role', { role });
+    }
+
+    if (status !== undefined) {
+      queryBuilder.andWhere('user.status = :status', { status });
+    }
+
+    const [users, total] = await queryBuilder
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .orderBy('user.createdAt', 'DESC')
+      .getManyAndCount();
+
+    return {
+      total,
+      page,
+      pageSize,
+      data: users.map(u => ({
+        id: u.id,
+        username: u.username,
+        nickname: u.nickname,
+        phone: u.phone,
+        email: u.email,
+        role: u.role,
+        status: u.status,
+        examYear: u.examYear,
+        examScore: u.examScore,
+        examRank: u.examRank,
+        createdAt: u.createdAt
+      }))
+    };
+  }
+
+  // 管理员：更新用户
+  async adminUpdateUser(userId: string, data: any) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    Object.assign(user, data);
+    await this.userRepository.save(user);
+
+    return { message: '更新成功' };
+  }
+
+  // 管理员：删除用户
+  async deleteUser(userId: string) {
+    await this.userRepository.delete(userId);
+  }
 }

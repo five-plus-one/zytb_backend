@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { College } from '../models/College';
 import { Major } from '../models/Major';
 import { EnrollmentPlan } from '../models/EnrollmentPlan';
+import { EnrollmentPlanGroup } from '../models/EnrollmentPlanGroup';
 import { AdmissionScore } from '../models/AdmissionScore';
 import { ScoreRanking } from '../models/ScoreRanking';
 import { Volunteer } from '../models/Volunteer';
@@ -12,6 +13,7 @@ import { AgentSession } from '../models/AgentSession';
 import { AgentMessage } from '../models/AgentMessage';
 import { AgentPreference } from '../models/AgentPreference';
 import { AgentRecommendation } from '../models/AgentRecommendation';
+import { SystemConfig } from '../models/SystemConfig';
 
 export const AppDataSource = new DataSource({
   ...config.database,
@@ -20,6 +22,7 @@ export const AppDataSource = new DataSource({
     College,
     Major,
     EnrollmentPlan,
+    EnrollmentPlanGroup,
     AdmissionScore,
     ScoreRanking,
     Volunteer,
@@ -29,7 +32,8 @@ export const AppDataSource = new DataSource({
     AgentSession,
     AgentMessage,
     AgentPreference,
-    AgentRecommendation
+    AgentRecommendation,
+    SystemConfig
   ],
   migrations: [__dirname + '/../migrations/**/*.js']
 });

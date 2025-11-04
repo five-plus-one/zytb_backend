@@ -2,6 +2,8 @@ import { AppDataSource } from '../config/database';
 import { Volunteer } from '../models/Volunteer';
 import { College } from '../models/College';
 import { Major } from '../models/Major';
+import { EnrollmentPlanGroup } from '../models/EnrollmentPlanGroup';
+import { RecommendationCardService } from './recommendationCard.service';
 import {
   VolunteerDto,
   VolunteerRecommendDto,
@@ -17,6 +19,8 @@ export class VolunteerService {
   private volunteerRepository = AppDataSource.getRepository(Volunteer);
   private collegeRepository = AppDataSource.getRepository(College);
   private majorRepository = AppDataSource.getRepository(Major);
+  private groupRepository = AppDataSource.getRepository(EnrollmentPlanGroup);
+  private cardService = new RecommendationCardService();
 
   // 获取我的志愿
   async getMyVolunteers(userId: string) {
@@ -259,5 +263,170 @@ export class VolunteerService {
       },
       details
     };
+  }
+
+  /**
+   * 加入志愿表（从推荐卡片）
+   * 注：这是一个简化实现，将专业组信息存储在remarks字段中
+   * 后续可以扩展Volunteer模型添加groupId字段
+   */
+  async addToVolunteerList(
+    userId: string,
+    groupInfo: {
+      groupId: string;
+      collegeCode: string;
+      collegeName: string;
+      groupCode?: string;
+      groupName?: string;
+    }
+  ) {
+    // 查找或创建College记录
+    let college = await this.collegeRepository.findOne({
+      where: { code: groupInfo.collegeCode }
+    });
+
+    if (!college) {
+      // 如果院校不存在，创建一个临时记录
+      college = this.collegeRepository.create({
+        code: groupInfo.collegeCode,
+        name: groupInfo.collegeName,
+        province: '未知',
+        type: '其他'
+      });
+      await this.collegeRepository.save(college);
+    }
+
+    // 使用一个虚拟major（或第一个专业）
+    // 在实际应用中，应该让用户选择具体专业
+    let major = await this.majorRepository.findOne({
+      where: {}
+    });
+
+    if (!major) {
+      throw new Error('系统中没有可用的专业数据');
+    }
+
+    // 获取当前用户的志愿数量，确定priority
+    const existingCount = await this.volunteerRepository.count({
+      where: { userId, status: VolunteerStatus.DRAFT }
+    });
+
+    // 创建志愿记录
+    const volunteer = this.volunteerRepository.create({
+      userId,
+      collegeId: college.id,
+      majorId: major.id,
+      priority: existingCount + 1,
+      isObeyAdjustment: true,
+      status: VolunteerStatus.DRAFT,
+      remarks: JSON.stringify({
+        type: 'group',
+        groupId: groupInfo.groupId,
+        groupCode: groupInfo.groupCode,
+        groupName: groupInfo.groupName,
+        addedAt: new Date().toISOString()
+      })
+    });
+
+    await this.volunteerRepository.save(volunteer);
+
+    return {
+      id: volunteer.id,
+      priority: volunteer.priority,
+      collegeName: groupInfo.collegeName,
+      groupName: groupInfo.groupName || '专业组',
+      message: '已成功加入志愿表'
+    };
+  }
+
+  /**
+   * 比对志愿信息
+   * 获取该专业组的完整推荐卡片信息（包含录取概率等）
+   */
+  async compareVolunteer(
+    userId: string,
+    params: {
+      groupId: string;
+      userScore: number;
+      userRank: number;
+      province: string;
+      category: string;
+    }
+  ) {
+    // 使用RecommendationCardService获取完整卡片信息
+    const [collegeCode, groupCode] = params.groupId.split('_');
+
+    const card = await this.cardService.getCardById(
+      params.groupId,
+      {
+        score: params.userScore,
+        rank: params.userRank,
+        province: params.province,
+        category: params.category,
+        year: 2025
+      }
+    );
+
+    if (!card) {
+      throw new Error('未找到该专业组的详细信息');
+    }
+
+    // 获取用户当前志愿表中的相似院校
+    const userVolunteers = await this.volunteerRepository.find({
+      where: { userId, status: VolunteerStatus.DRAFT },
+      relations: ['college']
+    });
+
+    const similarVolunteers = userVolunteers.filter(v => {
+      // 可以基于院校代码、名称等判断相似性
+      return v.college.code === collegeCode || v.college.name === card.collegeName;
+    });
+
+    return {
+      card: {
+        groupId: card.groupId,
+        collegeName: card.collegeName,
+        groupName: card.groupName,
+        riskLevel: card.riskLevel,
+        probability: card.probability,
+        confidence: card.confidence,
+        scoreGap: card.scoreGap,
+        rankGap: card.rankGap,
+        avgMinScore: card.avgMinScore,
+        avgMinRank: card.avgMinRank,
+        historicalData: card.historicalData,
+        majors: card.majors,
+        recommendReasons: card.recommendReasons,
+        warnings: card.warnings,
+        highlights: card.highlights
+      },
+      comparison: {
+        alreadyInList: similarVolunteers.length > 0,
+        similarCount: similarVolunteers.length,
+        similarVolunteers: similarVolunteers.map(v => ({
+          id: v.id,
+          priority: v.priority,
+          collegeName: v.college.name
+        }))
+      },
+      suggestion: this.generateComparisonSuggestion(card, similarVolunteers.length)
+    };
+  }
+
+  /**
+   * 生成比对建议
+   */
+  private generateComparisonSuggestion(card: any, similarCount: number): string {
+    if (similarCount > 0) {
+      return `您的志愿表中已有${similarCount}个相似院校，建议谨慎添加以保持梯度合理。`;
+    }
+
+    if (card.riskLevel === '冲') {
+      return '该院校属于"冲一冲"档位，建议放在前5个志愿中。';
+    } else if (card.riskLevel === '稳') {
+      return '该院校属于"稳一稳"档位，建议放在中间志愿位置。';
+    } else {
+      return '该院校属于"保一保"档位，建议放在后面志愿位置保底。';
+    }
   }
 }

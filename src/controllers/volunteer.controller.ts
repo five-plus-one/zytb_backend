@@ -101,4 +101,52 @@ export class VolunteerController {
       ResponseUtil.error(res, error.message);
     }
   }
+
+  // 加入志愿表（从推荐卡片添加）
+  async addToVolunteerList(req: Request, res: Response) {
+    try {
+      const userId = (req as AuthRequest).userId!;
+      const { groupId, collegeCode, collegeName, groupCode, groupName } = req.body;
+
+      if (!groupId || !collegeCode || !collegeName) {
+        return ResponseUtil.badRequest(res, '缺少必填参数: groupId, collegeCode, collegeName');
+      }
+
+      const result = await volunteerService.addToVolunteerList(userId, {
+        groupId,
+        collegeCode,
+        collegeName,
+        groupCode,
+        groupName
+      });
+
+      ResponseUtil.success(res, result, '已加入志愿表');
+    } catch (error: any) {
+      ResponseUtil.error(res, error.message);
+    }
+  }
+
+  // 比对志愿信息
+  async compareVolunteer(req: Request, res: Response) {
+    try {
+      const userId = (req as AuthRequest).userId!;
+      const { groupId, userScore, userRank, province, category } = req.body;
+
+      if (!groupId || !userScore || !userRank || !province || !category) {
+        return ResponseUtil.badRequest(res, '缺少必填参数: groupId, userScore, userRank, province, category');
+      }
+
+      const result = await volunteerService.compareVolunteer(userId, {
+        groupId,
+        userScore,
+        userRank,
+        province,
+        category
+      });
+
+      ResponseUtil.success(res, result);
+    } catch (error: any) {
+      ResponseUtil.error(res, error.message);
+    }
+  }
 }

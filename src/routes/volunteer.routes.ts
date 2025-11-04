@@ -26,4 +26,10 @@ router.post('/recommend', (req, res) => volunteerController.recommendVolunteers(
 // 志愿分析
 router.post('/analyze', (req, res) => volunteerController.analyzeVolunteers(req, res));
 
+// 加入志愿表
+router.post('/add', (req, res) => volunteerController.addToVolunteerList(req, res));
+
+// 比对志愿信息
+router.post('/compare', (req, res) => volunteerController.compareVolunteer(req, res));
+
 export default router;

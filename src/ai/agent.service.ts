@@ -45,6 +45,7 @@ export interface AgentResponse {
     totalTokens?: number;
     executionTime?: number;
     iterationsCount?: number;
+    extractedData?: any;
   };
 }
 

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { body } from 'express-validator';
 import { UserController } from '../controllers/user.controller';
 import { authMiddleware } from '../middlewares/auth';
+import { adminMiddleware } from '../middlewares/admin';
 import { handleValidationErrors } from '../utils/validator';
 
 const router = Router();
@@ -69,6 +70,26 @@ router.post(
     handleValidationErrors
   ],
   (req: Request, res: Response) => userController.sendVerifyCode(req, res)
+);
+
+// 更新Profile
+router.put('/profile', authMiddleware, (req, res) =>
+  userController.updateProfile(req, res)
+);
+
+// 管理员：获取用户列表
+router.get('/admin/users', [authMiddleware, adminMiddleware], (req: Request, res: Response) =>
+  userController.getUserList(req, res)
+);
+
+// 管理员：更新用户
+router.put('/admin/users/:userId', [authMiddleware, adminMiddleware], (req: Request, res: Response) =>
+  userController.adminUpdateUser(req, res)
+);
+
+// 管理员：删除用户
+router.delete('/admin/users/:userId', [authMiddleware, adminMiddleware], (req: Request, res: Response) =>
+  userController.deleteUser(req, res)
 );
 
 export default router;

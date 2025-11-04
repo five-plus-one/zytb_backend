@@ -54,17 +54,26 @@ async function buildGroupRelationships() {
   let skippedCount = 0;
 
   for (const plan of enrollmentPlans) {
-    const groupCode = normalizeGroupCode(plan.ep_majorGroupCode);
-    const sourceProvince = plan.ep_sourceProvince;
-    const subjectType = plan.ep_subjectType;
+    // getRawMany() 返回的字段名是下划线格式
+    const groupCode = normalizeGroupCode(plan.ep_major_group_code);
+    const sourceProvince = plan.ep_source_province;
+    const subjectType = plan.ep_subject_type;
+    const collegeCode = plan.ep_college_code;
+    const collegeName = plan.ep_college_name;
 
-    const uniqueKey = `${plan.ep_collegeCode}_${groupCode}_${sourceProvince}_${subjectType}`;
+    // 验证必需字段
+    if (!collegeCode || !collegeName || !sourceProvince || !subjectType) {
+      console.warn(`  ⚠️ 跳过无效记录: collegeCode=${collegeCode}, collegeName=${collegeName}`);
+      continue;
+    }
+
+    const uniqueKey = `${collegeCode}_${groupCode}_${sourceProvince}_${subjectType}`;
 
     // 检查是否已存在
     let existingGroup = await groupRepo.findOne({
       where: {
-        collegeCode: plan.ep_collegeCode,
-        groupCode: groupCode,
+        collegeCode,
+        groupCode,
         sourceProvince,
         subjectType
       }
@@ -78,11 +87,11 @@ async function buildGroupRelationships() {
 
     // 创建新的专业组记录
     const newGroup = groupRepo.create({
-      collegeCode: plan.ep_collegeCode,
-      collegeName: plan.ep_collegeName,
-      groupCode: groupCode,
-      groupCodeRaw: plan.ep_majorGroupCode,
-      groupName: plan.ep_majorGroupName,
+      collegeCode,
+      collegeName,
+      groupCode: groupCode || '',  // 确保不为undefined
+      groupCodeRaw: plan.ep_major_group_code,
+      groupName: plan.ep_major_group_name,
       sourceProvince,
       subjectType
     });

@@ -169,30 +169,4 @@ A: 查看 [数据导入指南](ENROLLMENT_PLAN_SUMMARY.md)
 **Q: 推荐算法是怎样的？**
 A: 查看源码 `src/services/admissionProbability.service.ts`
 
-### 联系我们
 
-- 提交 Issue
-- 发送邮件
-- 查看项目文档
-
----
-
-## 📝 文档贡献
-
-欢迎改进文档！
-
-1. Fork 本仓库
-2. 修改或新增文档
-3. 提交 Pull Request
-4. 等待审核
-
-### 文档规范
-- 使用 Markdown 格式
-- 保持清晰的结构
-- 添加代码示例
-- 更新文档导航
-
----
-
-**最后更新**: 2025-01-31
-**版本**: v2.1.0

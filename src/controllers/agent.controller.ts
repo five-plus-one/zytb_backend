@@ -107,6 +107,7 @@ export class AgentController {
 
       let fullResponse = '';
       let responseMetadata: any = null;
+      let extractedData: any = null;
 
       for await (const chunk of aiAgentService.chatStream(message, conversationHistory, userId)) {
         if (typeof chunk === 'string') {
@@ -116,6 +117,7 @@ export class AgentController {
         } else {
           // AgentResponse对象 (最终响应)
           responseMetadata = chunk.metadata;
+          extractedData = chunk.metadata?.extractedData;
           if (chunk.message && !fullResponse) {
             fullResponse = chunk.message;
           }
@@ -123,9 +125,16 @@ export class AgentController {
         }
       }
 
-      // 3. 保存助手响应到旧系统
+      // 3. 保存助手响应到旧系统，包括metadata和extractedData（推荐卡片数据）
       if (fullResponse) {
-        await conversationService.addMessage(sessionId, 'assistant', fullResponse, 'chat');
+        await conversationService.addMessage(
+          sessionId,
+          'assistant',
+          fullResponse,
+          'chat',
+          extractedData,  // 包含推荐卡片等提取的数据
+          responseMetadata // 包含工具调用等元数据
+        );
       }
 
       // 发送完成消息

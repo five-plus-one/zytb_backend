@@ -53,8 +53,20 @@ export class User {
   @Column({ type: 'int', nullable: true, name: 'exam_score' })
   examScore?: number;
 
+  @Column({ type: 'int', nullable: true, name: 'exam_rank' })
+  examRank?: number;
+
   @Column({ length: 20, nullable: true, name: 'subject_type' })
   subjectType?: string;
+
+  @Column({ type: 'simple-json', nullable: true, name: 'selected_subjects' })
+  selectedSubjects?: string[];
+
+  @Column({ length: 500, nullable: true, name: 'preferences' })
+  preferences?: string;
+
+  @Column({ length: 20, default: 'user' })
+  role!: string;
 
   @Column({ type: 'tinyint', default: 1 })
   status!: number;

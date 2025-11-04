@@ -102,4 +102,71 @@ export class UserController {
       ResponseUtil.error(res, error.message);
     }
   }
+
+  // 更新用户Profile（分数、位次等）
+  async updateProfile(req: Request, res: Response) {
+    try {
+      const userId = (req as AuthRequest).userId!;
+      const { examYear, examScore, examRank, subjectType, selectedSubjects, preferences } = req.body;
+
+      const result = await userService.updateProfile(userId, {
+        examYear,
+        examScore,
+        examRank,
+        subjectType,
+        selectedSubjects,
+        preferences
+      });
+
+      ResponseUtil.success(res, result, '更新成功');
+    } catch (error: any) {
+      ResponseUtil.error(res, error.message);
+    }
+  }
+
+  // 管理员：获取用户列表
+  async getUserList(req: Request, res: Response) {
+    try {
+      const { page = 1, pageSize = 20, keyword, role, status } = req.query;
+
+      const result = await userService.getUserList({
+        page: parseInt(page as string),
+        pageSize: parseInt(pageSize as string),
+        keyword: keyword as string,
+        role: role as string,
+        status: status ? parseInt(status as string) : undefined
+      });
+
+      ResponseUtil.success(res, result);
+    } catch (error: any) {
+      ResponseUtil.error(res, error.message);
+    }
+  }
+
+  // 管理员：更新用户信息
+  async adminUpdateUser(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      const updateData = req.body;
+
+      const result = await userService.adminUpdateUser(userId, updateData);
+
+      ResponseUtil.success(res, result, '更新成功');
+    } catch (error: any) {
+      ResponseUtil.error(res, error.message);
+    }
+  }
+
+  // 管理员：删除用户
+  async deleteUser(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+
+      await userService.deleteUser(userId);
+
+      ResponseUtil.success(res, null, '删除成功');
+    } catch (error: any) {
+      ResponseUtil.error(res, error.message);
+    }
+  }
 }
