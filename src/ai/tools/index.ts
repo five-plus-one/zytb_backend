@@ -52,6 +52,9 @@ import {
 import {
   SmartRecommendationTool
 } from './smartRecommendation.tool';
+import {
+  GetRecommendationIdsTool
+} from './getRecommendationIds.tool';
 
 /**
  * 初始化所有工具
@@ -109,7 +112,8 @@ export function initializeTools(): void {
   registry.register(new GetUserProfileTool());
 
   // 🎯 注册智能推荐工具(核心功能)
-  registry.register(new SmartRecommendationTool());
+  registry.register(new GetRecommendationIdsTool());  // 新版：轻量级推荐（推荐使用）
+  registry.register(new SmartRecommendationTool());    // 旧版：完整推荐（向后兼容）
 
   console.log(`\n🔧 AI工具系统初始化完成`);
   console.log(`📊 已注册 ${registry.getAllNames().length} 个工具:`);

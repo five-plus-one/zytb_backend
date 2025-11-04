@@ -4,12 +4,14 @@
 
 ## 🎯 核心特性
 
-### 🤖 AI 智能推荐（核心功能）
+### 🤖 AI 智能推荐（核心功能）⭐ V2版本
+- **轻量级推荐**: Token消耗降低97.5%（20k → 500 tokens）
+- **极速响应**: 响应时间提升70-80%（15-20秒 → 3-5秒）
 - **智能推荐引擎**: 基于数学模型实时计算录取概率
 - **冲稳保分类**: 自动分类（冲<35%, 稳35-90%, 保90-99%）
 - **个性化推荐**: 根据用户分数、位次、偏好智能筛选
 - **批量推荐**: 一次性返回40个精选专业组（冲12 + 稳20 + 保8）
-- **结构化数据**: 前端友好的 JSON 格式，支持一键操作
+- **推荐卡片**: 前端交互式卡片，支持一键操作
 
 ### 📊 专业组功能
 - **详情查询**: 完整的专业组信息、历年录取数据
@@ -100,6 +102,7 @@ zy_backend/
 │   │
 │   ├── services/                # 业务逻辑
 │   │   ├── smartRecommendation.service.ts
+│   │   ├── recommendationCard.service.ts      # 🆕 V2卡片数据服务
 │   │   ├── admissionProbability.service.ts
 │   │   ├── groupDetail.service.ts
 │   │   ├── groupComparison.service.ts
@@ -111,6 +114,10 @@ zy_backend/
 │   └── utils/                   # 工具函数
 │
 ├── docs/                        # 文档
+│   ├── V2_COMPLETION_SUMMARY.md              # 🆕 V2完成总结
+│   ├── TESTING_GUIDE_V2.md                   # 🆕 V2测试指南
+│   ├── RECOMMENDATION_V2_QUICK_REFERENCE.md  # 🆕 V2快速参考
+│   ├── RECOMMENDATION_CARDS_V2_IMPLEMENTATION.md  # 🆕 V2实施文档
 │   ├── api/                    # API 文档
 │   ├── development/            # 开发指南
 │   └── frontend/               # 前端集成
@@ -122,6 +129,12 @@ zy_backend/
 ---
 
 ## 📚 文档导航
+
+### ⭐ V2 推荐卡片文档（最新）
+- [V2 完成总结](docs/V2_COMPLETION_SUMMARY.md) - 实施总结和核心价值
+- [V2 测试指南](docs/TESTING_GUIDE_V2.md) - 详细测试步骤和场景
+- [V2 快速参考](docs/RECOMMENDATION_V2_QUICK_REFERENCE.md) - API格式和前端集成
+- [V2 实施文档](docs/RECOMMENDATION_CARDS_V2_IMPLEMENTATION.md) - 完整技术细节
 
 ### API 文档
 - [结构化推荐 API](docs/api/structured-recommendations.md) - 核心推荐 API

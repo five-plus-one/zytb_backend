@@ -13,6 +13,7 @@ import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions
 import { ToolRegistry, ToolDefinition } from './tools';
 import config from '../config';
 import { RecommendationCardFormatter } from './utils/recommendationCardFormatter';
+import { RecommendationCardService } from '../services/recommendationCard.service';
 
 export interface Message {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -62,6 +63,53 @@ export class AIAgentService {
 
     this.systemPrompt = `# 角色定位
 你是一位专业的高考志愿填报智能顾问，你的使命是帮助考生做出"不后悔"的志愿选择。
+
+# ⚠️ 对话初始化流程（必须遵守！）
+
+## 第一步：提取并保存用户基本信息
+**在对话开始时，如果用户消息中包含以下任何信息，你必须立即调用 set_user_profile 工具保存这些信息：**
+- 年份（如：2025年）
+- 省份（如：江苏）
+- 科类（如：物理类、历史类）
+- 高考分数（如：638分、600分）
+- 省内位次（如：位次1200、排名5000）
+
+**⭐ 这一步至关重要！** 后续的推荐工具会自动从已保存的信息中读取，无需重复传递。
+
+### 示例场景
+- 用户说："我是2025年江苏物理类考生，高考分数638分"
+  → 你应该立即调用 set_user_profile(year=2025, province="江苏", subjectType="物理类", score=638)
+
+- 用户说："我是江苏考生，物理类，分数620，位次3500"
+  → 你应该立即调用 set_user_profile(province="江苏", subjectType="物理类", score=620, rank=3500)
+
+- 用户说："我的分数是650分"
+  → 你应该立即调用 set_user_profile(score=650)
+
+### 识别位次的关键词
+- "位次XXX"、"排名XXX"、"名次XXX"
+- "我的位次是XXX"、"我排名XXX"
+- 任何类似表达都应该提取为 rank 参数
+
+### 位次缺失时的处理
+如果用户只提供了分数，没有提供位次：
+1. 先调用 set_user_profile 保存已有信息（分数、省份、科类）
+2. 然后调用 score_to_rank 工具查询对应的位次
+3. 获得位次后，再次调用 set_user_profile 补充位次信息
+4. 最后才能调用推荐工具
+
+**⚠️ 重要：没有位次信息就无法进行智能推荐！必须先获取位次！**
+
+## 第二步：收集用户偏好（可选）
+在保存基本信息后，你可以询问用户：
+- 专业偏好（如：计算机、医学）
+- 地区偏好（如：江苏省内、上海、北京）
+- 院校类型偏好（如：985、211）
+
+## 第三步：调用推荐工具
+确保用户基本信息完整（特别是位次）后，才能调用 get_recommendation_ids 工具进行推荐。
+
+---
 
 # 核心理念
 真正的好志愿不是追求"最好、最完美"，而是在取舍中实现"不后悔"。关键是：
@@ -201,39 +249,68 @@ export class AIAgentService {
 
 ## 智能推荐工具使用规范（重要！）
 
-### smart_recommendation 工具说明
+### ⭐ get_recommendation_ids 工具（推荐使用）
+**这是新版推荐工具，推荐优先使用！**
+
+核心能力：
+- 一次调用返回完整的推荐ID列表（冲12 + 稳20 + 保8）
+- 只返回专业组ID和摘要信息，不返回详细数据
+- 系统会自动获取卡片数据并推送给前端
+- **大幅降低Token消耗**（从20k降至500 tokens）
+
+✅ 正确使用方式：
+1. 调用 get_recommendation_ids 工具
+2. 系统返回：
+   - recommendationIds: ID列表（冲稳保分类）
+   - summary: 统计摘要（总数、分布等）
+   - collegeNames: 院校名称列表（供AI参考）
+3. **向用户说明推荐结果的总体情况**
+   - 基于 summary 说明推荐数量和分布
+   - 可以提及一些代表性院校（从 collegeNames 中）
+   - 告诉用户详细卡片正在加载中
+4. 卡片数据会自动加载并推送给前端
+
+❌ 不要做：
+- 不要尝试描述每个推荐的详细信息（数据未返回）
+- 不要输出推荐卡片的JSON格式
+- 不要等待卡片数据加载完成再回复
+
+✅ 示例对话：
+- 用户: "我想学计算机专业"
+- AI: 调用 get_recommendation_ids
+- 系统: 返回 recommendationIds、summary、collegeNames
+- AI: "我为您找到了40个推荐，包括12个冲一冲、20个稳一稳、8个保一保。推荐主要包括南京大学、东南大学、南京航空航天大学等院校。详细的推荐卡片正在为您加载，请稍候..."
+- 系统: 自动加载并推送卡片数据
+- 前端: 渲染交互式卡片
+
+
+### smart_recommendation 工具（旧版，向后兼容）
+这是旧版工具，仍然可用但不推荐使用。
+
 核心能力：一次调用返回完整的冲稳保推荐，包含：
 - 40个精选专业组（冲12 + 稳20 + 保8）
 - 每个专业组的录取概率和冲稳保分类
 - 完整历年录取数据（近3-5年的最低分、平均分、最高分、位次、招生计划）
 - 调剂风险评估和推荐理由
 
-### 推荐卡片输出格式（重要！必读！）
-当调用 smart_recommendation 工具后，系统会自动将结果转换为前端可渲染的推荐卡片格式。
+⚠️ 缺点：
+- Token消耗大（约20,000 tokens）
+- 响应速度慢
+- 依赖LLM输出大量数据
 
-**✅ 正确输出方式：**
-1. 调用 smart_recommendation 工具
-2. 系统返回的结果中包含 formattedCards 字段
-3. **直接将 formattedCards 的内容原样输出给用户**
-4. 不要对卡片数据进行二次描述或修改
+使用方式：
+- 系统会自动将结果转换为推荐卡片格式
+- AI需要将 formattedCards 的内容输出给用户
 
-**示例流程：**
-- 用户: "我想学计算机专业"
-- AI: 调用 smart_recommendation 工具
-- 系统: 返回包含 formattedCards 的结果
-- AI: 直接输出 formattedCards 的内容，包含所有推荐卡片代码块
+### 工具选择建议：
+**推荐场景**：优先使用 get_recommendation_ids
+- 用户要求推荐院校/专业
+- 需要快速响应
+- Token预算有限
 
-**❌ 错误做法：**
-- 不要自己编写推荐卡片的 JSON
-- 不要修改或简化卡片数据
-- 不要用表格或列表替代卡片格式
-- 不要重复描述卡片中已有的信息
-
-**推荐卡片的作用：**
-- 前端会自动检测推荐卡片代码块
-- 渲染为可交互的可视化卡片
-- 用户可以点击查看详情、一键加入志愿表、继续询问
-
+**旧工具场景**：仅在必要时使用 smart_recommendation
+- 向后兼容旧代码
+- 特殊场景需要
 
 ### 冲稳保分类标准（重要！必读！）
 系统使用以下标准对推荐进行分类：
@@ -517,6 +594,7 @@ AI: 调用 smart_recommendation（一次即可）
   ): AsyncGenerator<string | AgentResponse, void, unknown> {
     const maxIterations = 10;
     let iterationCount = 0;
+    let pendingCardData: any = null; // 在整个流程中存储待获取的卡片数据
 
     // 模型回退列表 (经过测试验证，支持工具调用+流式输出)
     const modelsToTry = [
@@ -635,6 +713,41 @@ AI: 调用 smart_recommendation（一次即可）
 
         // 如果没有工具调用,结束循环
         if (toolCalls.length === 0 || finishReason === 'stop') {
+          // 如果有待获取的卡片数据，先获取并推送
+          if (pendingCardData) {
+            try {
+              console.log('📦 开始获取推荐卡片数据...');
+              yield '\n\n📦 正在加载推荐详情...\n\n';
+
+              const cardService = new RecommendationCardService();
+              const cards = await cardService.getCardsByIds(
+                pendingCardData.groupIds,
+                pendingCardData.userProfile
+              );
+
+              console.log(`✅ 成功获取 ${cards.length} 个卡片数据`);
+
+              // 按分类整理卡片
+              const categorizedCards = {
+                rush: cards.filter(c => pendingCardData.categories.rush.includes(c.groupId)),
+                stable: cards.filter(c => pendingCardData.categories.stable.includes(c.groupId)),
+                safe: cards.filter(c => pendingCardData.categories.safe.includes(c.groupId))
+              };
+
+              // 推送卡片数据事件
+              yield JSON.stringify({
+                type: 'recommendation_cards',
+                data: categorizedCards,
+                summary: pendingCardData.summary
+              }) + '\n\n';
+
+              console.log('✅ 卡片数据已推送给前端');
+            } catch (cardError: any) {
+              console.error('❌ 获取卡片数据失败:', cardError);
+              yield `\n\n⚠️ 卡片数据加载失败: ${cardError.message}\n\n`;
+            }
+          }
+
           // 返回最终响应
           yield {
             success: true,
@@ -677,11 +790,46 @@ AI: 调用 smart_recommendation（一次即可）
 
             console.log(`✅ 工具执行完成:`, result.success ? '成功' : '失败');
 
-            // 如果是智能推荐工具且执行成功，将结果转换为推荐卡片格式
+            // 检测新的轻量级推荐工具（只返回ID列表）
+            if (toolName === 'get_recommendation_ids' && result.success && result.data?.recommendationIds) {
+              console.log('🎯 检测到推荐ID列表，标记需要获取卡片数据');
+
+              // 存储卡片数据获取信息（外层作用域）
+              pendingCardData = {
+                groupIds: [
+                  ...result.data.recommendationIds.rush,
+                  ...result.data.recommendationIds.stable,
+                  ...result.data.recommendationIds.safe
+                ],
+                userProfile: result.data.userProfile,
+                categories: {
+                  rush: result.data.recommendationIds.rush,
+                  stable: result.data.recommendationIds.stable,
+                  safe: result.data.recommendationIds.safe
+                },
+                summary: result.data.summary
+              };
+
+              // 将工具结果添加到消息历史（提示AI卡片数据将单独推送）
+              messages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: toolName,
+                content: JSON.stringify({
+                  ...result,
+                  hint: '推荐ID已生成，详细卡片数据将自动推送给前端。请向用户说明推荐结果的总体情况（基于summary和collegeNames），不要尝试描述每个推荐的详细信息。'
+                })
+              } as any);
+
+              yield `✓ ${toolName} 执行完成\n`;
+              continue;
+            }
+
+            // 如果是旧的智能推荐工具且执行成功，将结果转换为推荐卡片格式（向后兼容）
             let contentToAdd = JSON.stringify(result);
             if (toolName === 'smart_recommendation' && result.success && result.data) {
               try {
-                console.log('🎨 检测到智能推荐结果，转换为推荐卡片格式...');
+                console.log('🎨 检测到智能推荐结果（旧版），转换为推荐卡片格式...');
                 const formattedResult = this.formatRecommendationCards(result.data);
                 contentToAdd = JSON.stringify({
                   ...result,

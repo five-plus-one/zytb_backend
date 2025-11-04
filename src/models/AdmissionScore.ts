@@ -9,6 +9,7 @@ import {
   JoinColumn
 } from 'typeorm';
 import { College } from './College';
+import { EnrollmentPlanGroup } from './EnrollmentPlanGroup';
 
 @Entity('admission_scores')
 @Index(['year', 'sourceProvince', 'collegeName'])
@@ -116,6 +117,15 @@ export class AdmissionScore {
 
   @Column({ type: 'uuid', nullable: true, name: 'college_id' })
   collegeId?: string;
+
+  // ===== 新增：关联专业组 =====
+  @ManyToOne(() => EnrollmentPlanGroup, group => group.admissionScores, { nullable: true })
+  @JoinColumn({ name: 'group_id' })
+  group?: EnrollmentPlanGroup;
+
+  @Column({ type: 'varchar', length: '36', nullable: true, name: 'group_id' })
+  @Index()
+  groupId?: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
