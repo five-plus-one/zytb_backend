@@ -7,7 +7,7 @@ const controller = new GroupDetailController();
 // 获取专业组详细信息
 router.get('/group/:groupId/detail', (req, res) => controller.getGroupDetail(req, res));
 
-// 对比多个专业组
-router.post('/group/compare', (req, res) => controller.compareGroups(req, res));
+// 对比多个专业组 (文档要求: POST /enrollment-plan/compare)
+router.post('/compare', (req, res) => controller.compareGroups(req, res));
 
 export default router;

@@ -23,4 +23,7 @@ router.delete('/table/:volunteerId', (req, res) => controller.deleteVolunteer(re
 // 导出志愿表
 router.get('/table/export', (req, res) => controller.exportVolunteerTable(req, res));
 
+// 智能优化志愿顺序
+router.post('/table/optimize', (req, res) => controller.optimizeVolunteerOrder(req, res));
+
 export default router;

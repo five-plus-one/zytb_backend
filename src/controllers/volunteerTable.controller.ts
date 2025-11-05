@@ -342,4 +342,150 @@ export class VolunteerTableController {
       return ResponseUtil.error(res, error.message || '导出志愿表失败');
     }
   }
+
+  /**
+   * 智能优化志愿顺序
+   * POST /api/volunteer/table/optimize
+   */
+  async optimizeVolunteerOrder(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId!;
+      const { userScore, userRank, subjectType } = req.body;
+
+      if (!userScore) {
+        return ResponseUtil.badRequest(res, '请提供用户分数');
+      }
+
+      // 查询用户的志愿表批次
+      const batch = await this.batchRepo.findOne({
+        where: { userId },
+        relations: ['groups', 'groups.majors'],
+        order: { createdAt: 'DESC' }
+      });
+
+      if (!batch || batch.groups.length === 0) {
+        return ResponseUtil.error(res, '志愿表为空，无法优化', 400);
+      }
+
+      // 为每个志愿计算录取概率和分类
+      const volunteersWithProbability = await Promise.all(
+        batch.groups.map(async (group) => {
+          // 查询历年分数
+          const historicalScores = await this.scoreRepo
+            .createQueryBuilder('score')
+            .where('score.collegeCode = :collegeCode', { collegeCode: group.collegeCode })
+            .andWhere('score.groupCode = :groupCode', { groupCode: group.groupCode })
+            .orderBy('score.year', 'DESC')
+            .limit(5)
+            .getMany();
+
+          if (historicalScores.length === 0) {
+            return {
+              volunteerId: group.id,
+              currentOrderNum: group.groupOrder,
+              collegeName: group.collegeName,
+              groupName: group.groupName,
+              category: 'stable' as 'rush' | 'stable' | 'safe',
+              probability: 0.5,
+              reason: '暂无历年分数数据'
+            };
+          }
+
+          // 计算概率
+          const higherYears = historicalScores.filter(s => userScore >= (s.minScore || 0)).length;
+          const baseProb = higherYears / historicalScores.length;
+
+          // 位次因子
+          let rankFactor = 1.0;
+          if (userRank) {
+            const avgMinRank = historicalScores.reduce((sum, s) => sum + (s.minRank || 0), 0) / historicalScores.length;
+            const rankDiff = avgMinRank - userRank;
+            rankFactor = rankDiff > 0 ? 1.2 : 0.8;
+          }
+
+          const probability = Math.min(Math.max(baseProb * rankFactor, 0), 1);
+
+          // 分类
+          let category: 'rush' | 'stable' | 'safe';
+          if (probability < 0.35) {
+            category = 'rush';
+          } else if (probability < 0.9) {
+            category = 'stable';
+          } else {
+            category = 'safe';
+          }
+
+          // 计算分数余量
+          const avgMinScore = historicalScores.reduce((sum, s) => sum + (s.minScore || 0), 0) / historicalScores.length;
+          const safetyMargin = Math.round(userScore - avgMinScore);
+
+          // 生成建议理由
+          let reason = '';
+          if (category === 'rush') {
+            reason = `录取概率${Math.round(probability * 100)}%，分数余量${safetyMargin}分，建议作为冲刺志愿`;
+          } else if (category === 'stable') {
+            reason = `录取概率${Math.round(probability * 100)}%，分数余量${safetyMargin}分，推荐稳妥填报`;
+          } else {
+            reason = `录取概率${Math.round(probability * 100)}%，分数余量${safetyMargin}分，可作为保底志愿`;
+          }
+
+          return {
+            volunteerId: group.id,
+            currentOrderNum: group.groupOrder,
+            collegeName: group.collegeName,
+            groupName: group.groupName,
+            category,
+            probability: Math.round(probability * 100) / 100,
+            reason
+          };
+        })
+      );
+
+      // 按照冲稳保和概率排序
+      // 规则：冲刺志愿(rush)排前面，稳妥志愿(stable)中间，保底志愿(safe)后面
+      // 同类别内按概率从高到低排序（冲刺除外，冲刺按概率从低到高）
+      const categoryOrder = { 'rush': 1, 'stable': 2, 'safe': 3 };
+
+      const optimizedVolunteers = volunteersWithProbability.sort((a, b) => {
+        // 先按分类排序
+        if (categoryOrder[a.category] !== categoryOrder[b.category]) {
+          return categoryOrder[a.category] - categoryOrder[b.category];
+        }
+
+        // 同类别内排序
+        if (a.category === 'rush') {
+          // 冲刺志愿：概率从低到高（最冲的在最前面）
+          return a.probability - b.probability;
+        } else {
+          // 稳妥和保底：概率从高到低（更有把握的在前面）
+          return b.probability - a.probability;
+        }
+      });
+
+      // 分配新的顺序号
+      const optimizedOrder = optimizedVolunteers.map((volunteer, index) => ({
+        volunteerId: volunteer.volunteerId,
+        currentOrderNum: volunteer.currentOrderNum,
+        suggestedOrderNum: index + 1,
+        category: volunteer.category,
+        probability: volunteer.probability,
+        reason: volunteer.reason,
+        collegeName: volunteer.collegeName,
+        groupName: volunteer.groupName
+      }));
+
+      return ResponseUtil.success(res, {
+        optimizedOrder,
+        summary: {
+          rushCount: optimizedOrder.filter(v => v.category === 'rush').length,
+          stableCount: optimizedOrder.filter(v => v.category === 'stable').length,
+          safeCount: optimizedOrder.filter(v => v.category === 'safe').length,
+          suggestion: '建议将志愿按照"冲-稳-保"的顺序排列，确保录取机会最大化'
+        }
+      }, '优化成功');
+    } catch (error: any) {
+      console.error('❌ 优化志愿顺序失败:', error);
+      return ResponseUtil.error(res, error.message || '优化志愿顺序失败');
+    }
+  }
 }
