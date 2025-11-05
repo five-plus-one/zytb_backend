@@ -14,6 +14,7 @@ import { ToolRegistry, ToolDefinition } from './tools';
 import config from '../config';
 import { RecommendationCardFormatter } from './utils/recommendationCardFormatter';
 import { RecommendationCardService } from '../services/recommendationCard.service';
+import { entityExtractionService } from '../services/entityExtraction.service';
 
 export interface Message {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -749,16 +750,34 @@ AI: 调用 smart_recommendation（一次即可）
             }
           }
 
+          // 提取实体并标记
+          let markedContent = fullContent;
+          let entities: any[] = [];
+          try {
+            const { text, entities: extractedEntities } = await entityExtractionService.markupEntities(fullContent);
+            markedContent = text;
+            entities = extractedEntities;
+
+            if (entities.length > 0) {
+              console.log(`✅ 提取到 ${entities.length} 个实体: `, entities.map(e => `${e.type}:${e.text}`).join(', '));
+            }
+          } catch (entityError: any) {
+            console.error('❌ 实体提取失败:', entityError);
+            // 实体提取失败不影响主流程,继续使用原始内容
+          }
+
           // 返回最终响应
           yield {
             success: true,
-            message: fullContent,
+            message: markedContent, // 使用标记后的内容
             conversationHistory: [
               ...messages,
-              { role: 'assistant', content: fullContent }
+              { role: 'assistant', content: markedContent }
             ],
             metadata: {
-              iterationsCount: iterationCount
+              iterationsCount: iterationCount,
+              extractedData: pendingCardData, // 推荐卡片数据
+              entities: entities // 提取的实体信息
             }
           } as AgentResponse;
           return;

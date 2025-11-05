@@ -9,6 +9,7 @@ import logger from './config/logger';
 import routes from './routes';
 import { errorHandler, notFoundHandler } from './middlewares/error';
 import { initializeTools } from './ai/tools';
+import { entityExtractionService } from './services/entityExtraction.service';
 
 const app: Application = express();
 
@@ -58,6 +59,10 @@ const startServer = async () => {
     // 初始化 AI 工具
     initializeTools();
     logger.info('✅ AI 工具初始化成功');
+
+    // 初始化实体提取服务
+    await entityExtractionService.initialize();
+    logger.info('✅ 实体提取服务初始化成功');
 
     // 启动 HTTP 服务
     const port = config.app.port;

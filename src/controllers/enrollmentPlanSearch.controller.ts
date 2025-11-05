@@ -43,6 +43,11 @@ export class EnrollmentPlanSearchController {
         .createQueryBuilder('ep')
         .where('ep.year = :year', { year });
 
+      // 省份筛选
+      if (province) {
+        queryBuilder.andWhere('ep.sourceProvince = :province', { province });
+      }
+
       // 院校名称
       if (collegeName) {
         queryBuilder.andWhere('ep.collegeName LIKE :collegeName', {
@@ -78,10 +83,7 @@ export class EnrollmentPlanSearchController {
         queryBuilder.andWhere('ep.collegeType = :collegeType', { collegeType });
       }
 
-      // 地区
-      if (province) {
-        queryBuilder.andWhere('ep.collegeProvince = :province', { province });
-      }
+      // 院校所在地区
       if (city) {
         queryBuilder.andWhere('ep.collegeCity = :city', { city });
       }

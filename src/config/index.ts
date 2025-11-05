@@ -20,14 +20,15 @@ export default {
     username: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'volunteer_system',
-    synchronize: false, // 暂时禁用自动同步以避免索引冲突
+    synchronize: false,
     logging: process.env.NODE_ENV === 'development',
     entities: [path.join(__dirname, '../models/**/*.{ts,js}')],
     migrations: [path.join(__dirname, '../migrations/**/*.{ts,js}')],
     charset: 'utf8mb4',
     extra: {
-      charset: 'utf8mb4_unicode_ci',
-      connectionLimit: 10
+      charset: 'utf8mb4',
+      connectionLimit: 10,
+      connectionInitSqls: ["SET NAMES 'utf8mb4'"]
     }
   },
 
