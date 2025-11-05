@@ -26,8 +26,10 @@ router.use('/college', collegeRoutes);
 router.use('/major', majorRoutes);
 router.use('/volunteer', volunteerRoutes);
 router.use('/system', systemRoutes);
-router.use('/enrollment-plan', enrollmentPlanRoutes);
-router.use('/enrollment-plan', enrollmentPlanSearchRoutes); // 搜索路由
+router.use("/enrollment-plan", enrollmentPlanSearchRoutes); // 搜索路由（必须在前面，避免被/:id拦截）
+router.use("/enrollment-plan", enrollmentPlanRoutes);
+router.use("/enrollment-plan", enrollmentPlanSearchRoutes); // 搜索路由（必须在前面，避免被/:id拦截）
+router.use("/enrollment-plan", enrollmentPlanRoutes);
 router.use('/admission-score', admissionScoreRoutes);
 router.use('/score-ranking', scoreRankingRoutes);
 router.use('/agent', agentRoutes);

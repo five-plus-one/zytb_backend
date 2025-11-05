@@ -1,5 +1,5 @@
-import { AppDataSource } from './config/database';
-import { EnrollmentPlan } from './models/EnrollmentPlan';
+import { AppDataSource } from './src/config/database';
+import { EnrollmentPlan } from './src/models/EnrollmentPlan';
 
 async function test() {
   await AppDataSource.initialize();
