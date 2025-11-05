@@ -10,6 +10,7 @@ import {
   Index
 } from 'typeorm';
 import { User } from './User';
+import { VolunteerTable } from './VolunteerTable';
 
 /**
  * 志愿填报批次表
@@ -27,6 +28,14 @@ export class VolunteerBatch {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user!: User;
+
+  @Column({ type: 'uuid', name: 'table_id' })
+  @Index()
+  tableId!: string;
+
+  @ManyToOne(() => VolunteerTable, table => table.batches, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'table_id' })
+  table!: VolunteerTable;
 
   @Column({ type: 'int' })
   year!: number;

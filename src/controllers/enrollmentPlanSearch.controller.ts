@@ -14,12 +14,14 @@ export class EnrollmentPlanSearchController {
   async searchPlans(req: Request, res: Response) {
     try {
       const {
+        keyword,        // 新增：通用关键词（同时搜索院校和专业）
         collegeName,
         majorName,
         subjectType,
         collegeLevel,
         collegeType,
-        province,
+        province,       // 生源地省份（考生所在省份）
+        collegeProvince, // 院校所在省份
         city,
         year = 2025,
         minScore,
@@ -48,20 +50,33 @@ export class EnrollmentPlanSearchController {
         .createQueryBuilder('ep')
         .where('ep.year = :year', { year });
 
-      // 省份筛选
+      // 通用关键词搜索（优先级最高，同时搜索院校名、专业名、专业组名）
+      if (keyword) {
+        queryBuilder.andWhere(
+          '(ep.collegeName LIKE :keyword OR ep.majorName LIKE :keyword OR ep.majorGroupName LIKE :keyword)',
+          { keyword: `%${keyword}%` }
+        );
+      }
+
+      // 生源地省份筛选（考生所在省份，如"江苏"）
       if (province) {
         queryBuilder.andWhere('ep.sourceProvince = :province', { province });
       }
 
-      // 院校名称
-      if (collegeName) {
+      // 院校所在省份筛选（如"北京"、"上海"）
+      if (collegeProvince) {
+        queryBuilder.andWhere('ep.collegeProvince = :collegeProvince', { collegeProvince });
+      }
+
+      // 院校名称精确搜索（如果没有keyword时使用）
+      if (collegeName && !keyword) {
         queryBuilder.andWhere('ep.collegeName LIKE :collegeName', {
           collegeName: `%${collegeName}%`
         });
       }
 
-      // 专业名称
-      if (majorName) {
+      // 专业名称精确搜索（如果没有keyword时使用）
+      if (majorName && !keyword) {
         queryBuilder.andWhere('ep.majorName LIKE :majorName', {
           majorName: `%${majorName}%`
         });

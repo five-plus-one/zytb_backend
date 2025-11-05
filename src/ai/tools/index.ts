@@ -55,6 +55,10 @@ import {
 import {
   GetRecommendationIdsTool
 } from './getRecommendationIds.tool';
+import {
+  UpdatePreferencesTool,
+  GetPreferencesProgressTool
+} from './updatePreferences.tool';
 
 /**
  * 初始化所有工具
@@ -114,6 +118,10 @@ export function initializeTools(): void {
   // 🎯 注册智能推荐工具(核心功能)
   registry.register(new GetRecommendationIdsTool());  // 新版：轻量级推荐（推荐使用）
   registry.register(new SmartRecommendationTool());    // 旧版：完整推荐（向后兼容）
+
+  // 🎯 注册用户偏好收集工具(项目灵魂功能 - 收集30个核心数据点)
+  registry.register(new UpdatePreferencesTool());
+  registry.register(new GetPreferencesProgressTool());
 
   console.log(`\n🔧 AI工具系统初始化完成`);
   console.log(`📊 已注册 ${registry.getAllNames().length} 个工具:`);

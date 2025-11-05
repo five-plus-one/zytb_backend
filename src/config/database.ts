@@ -9,6 +9,7 @@ import { AdmissionScore } from '../models/AdmissionScore';
 import { ScoreRanking } from '../models/ScoreRanking';
 import { Volunteer } from '../models/Volunteer';
 import { VolunteerBatch, VolunteerGroup, VolunteerMajor } from '../models/VolunteerNew';
+import { VolunteerTable } from '../models/VolunteerTable';
 import { AgentSession } from '../models/AgentSession';
 import { AgentMessage } from '../models/AgentMessage';
 import { AgentPreference } from '../models/AgentPreference';
@@ -26,6 +27,7 @@ export const AppDataSource = new DataSource({
     AdmissionScore,
     ScoreRanking,
     Volunteer,
+    VolunteerTable,
     VolunteerBatch,
     VolunteerGroup,
     VolunteerMajor,

@@ -22,6 +22,9 @@ import groupDetailRoutes from './groupDetail.routes';
 import probabilityRoutes from './probability.routes';
 import volunteerTableRoutes from './volunteerTable.routes';
 import favoriteRoutes from './favorite.routes';
+// 新增：志愿表系统重构路由
+import volunteerTableManagementRoutes from './volunteerTableManagement.routes';
+import volunteerCurrentRoutes from './volunteerCurrent.routes';
 
 const router = Router();
 
@@ -29,8 +32,14 @@ const router = Router();
 router.use('/user', userRoutes);
 router.use('/college', collegeRoutes);
 router.use('/major', majorRoutes);
+
+// ==================== 志愿表系统（新架构） ====================
+router.use('/volunteer/tables', volunteerTableManagementRoutes); // 志愿表管理
+router.use('/volunteer/current', volunteerCurrentRoutes);        // 当前表操作
+// 旧版志愿表接口（向后兼容）
 router.use('/volunteer', volunteerRoutes);
-router.use('/volunteer', volunteerTableRoutes); // 新增志愿表管理路由
+router.use('/volunteer', volunteerTableRoutes);
+
 router.use('/system', systemRoutes);
 router.use('/enrollment-plan', enrollmentPlanSearchRoutes); // 搜索路由（必须在前面，避免被/:id拦截）
 router.use('/enrollment-plan', groupDetailRoutes); // 专业组详情路由

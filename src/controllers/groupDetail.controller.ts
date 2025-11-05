@@ -31,14 +31,15 @@ export class GroupDetailController {
       }
 
       let plans: EnrollmentPlan[] = [];
-      let collegeCode: string;
-      let groupCode: string;
-      let year: number;
-      let province: string;
+      let collegeCode: string = '';
+      let groupCode: string = '';
+      let year: number = 2025;
+      let province: string = '';
 
       // 判断groupId格式
-      // UUID格式: 9434f64a-1c90-49e1-94c5-cc0701340471 (包含连字符，长度36)
-      // 自定义格式: collegeCode_groupCode_year_province
+      // 格式1 UUID: 9434f64a-1c90-49e1-94c5-cc0701340471 (包含连字符，长度36)
+      // 格式2 完整自定义: collegeCode_groupCode_year_province (如 10384_08_2025_江苏)
+      // 格式3 短格式: collegeCode-groupCode (如 2103-01) ← 新增支持
       if (groupId.includes('-') && groupId.length === 36) {
         // UUID格式 - 直接通过group_id查询
         console.log(`📋 使用UUID查询专业组: ${groupId}`);
@@ -58,13 +59,52 @@ export class GroupDetailController {
         groupCode = firstPlan.majorGroupCode || '';
         year = firstPlan.year;
         province = firstPlan.sourceProvince;
+      } else if (groupId.includes('-') && !groupId.includes('_')) {
+        // 短格式: collegeCode-groupCode (如 2103-01)
+        console.log(`📋 使用短格式查询专业组: ${groupId}`);
+
+        const parts = groupId.split('-');
+        if (parts.length !== 2) {
+          return ResponseUtil.badRequest(res, '无效的groupId短格式，应为 collegeCode-groupCode');
+        }
+
+        collegeCode = parts[0];
+        groupCode = parts[1];
+
+        // 查询最新年份的数据（假设当前年份或2025）
+        const currentYear = new Date().getFullYear();
+        const possibleYears = [currentYear, 2025, 2024];
+
+        // 尝试多个年份
+        for (const tryYear of possibleYears) {
+          plans = await this.planRepo.find({
+            where: {
+              collegeCode,
+              majorGroupCode: groupCode,
+              year: tryYear
+            },
+            relations: ['college'],
+            take: 10
+          });
+
+          if (plans.length > 0) {
+            year = tryYear;
+            province = plans[0].sourceProvince;
+            console.log(`✅ 找到专业组数据，年份: ${year}, 省份: ${province}`);
+            break;
+          }
+        }
+
+        if (plans.length === 0) {
+          return ResponseUtil.error(res, `未找到专业组 ${collegeCode}-${groupCode} 的数据`, 404);
+        }
       } else {
-        // 自定义格式 - 解析并查询
-        console.log(`📋 使用自定义格式查询专业组: ${groupId}`);
+        // 完整自定义格式 - 解析并查询
+        console.log(`📋 使用完整自定义格式查询专业组: ${groupId}`);
 
         const parts = groupId.split('_');
         if (parts.length < 4) {
-          return ResponseUtil.badRequest(res, '无效的groupId格式，应为 collegeCode_groupCode_year_province 或 UUID格式');
+          return ResponseUtil.badRequest(res, '无效的groupId格式，应为 collegeCode_groupCode_year_province 或 UUID格式 或 collegeCode-groupCode短格式');
         }
 
         collegeCode = parts[0];
