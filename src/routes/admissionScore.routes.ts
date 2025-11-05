@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { AdmissionScoreController } from '../controllers/admissionScore.controller';
+import { GroupDetailController } from '../controllers/groupDetail.controller';
 
 const router = Router();
 const admissionScoreController = new AdmissionScoreController();
+const groupDetailController = new GroupDetailController();
+
+// 获取专业组历年分数（新增）
+router.get('/group/:groupId', (req, res) => groupDetailController.getGroupScores(req, res));
 
 // 获取录取分数线列表
 router.get('/list', (req, res) => admissionScoreController.getAdmissionScoreList(req, res));

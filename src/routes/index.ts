@@ -17,6 +17,11 @@ import aiRoutes from './ai.routes';
 import structuredRecommendationRoutes from './structuredRecommendation.routes';
 import enrollmentPlanGroupRoutes from './enrollmentPlanGroup.routes';
 import enrollmentPlanSearchRoutes from './enrollmentPlanSearch.routes';
+import adminRoutes from './admin.routes';
+import groupDetailRoutes from './groupDetail.routes';
+import probabilityRoutes from './probability.routes';
+import volunteerTableRoutes from './volunteerTable.routes';
+import favoriteRoutes from './favorite.routes';
 
 const router = Router();
 
@@ -25,12 +30,13 @@ router.use('/user', userRoutes);
 router.use('/college', collegeRoutes);
 router.use('/major', majorRoutes);
 router.use('/volunteer', volunteerRoutes);
+router.use('/volunteer', volunteerTableRoutes); // 新增志愿表管理路由
 router.use('/system', systemRoutes);
-router.use("/enrollment-plan", enrollmentPlanSearchRoutes); // 搜索路由（必须在前面，避免被/:id拦截）
-router.use("/enrollment-plan", enrollmentPlanRoutes);
-router.use("/enrollment-plan", enrollmentPlanSearchRoutes); // 搜索路由（必须在前面，避免被/:id拦截）
-router.use("/enrollment-plan", enrollmentPlanRoutes);
+router.use('/enrollment-plan', enrollmentPlanSearchRoutes); // 搜索路由（必须在前面，避免被/:id拦截）
+router.use('/enrollment-plan', groupDetailRoutes); // 专业组详情路由
+router.use('/enrollment-plan', enrollmentPlanRoutes);
 router.use('/admission-score', admissionScoreRoutes);
+router.use('/admission-probability', probabilityRoutes); // 录取概率计算
 router.use('/score-ranking', scoreRankingRoutes);
 router.use('/agent', agentRoutes);
 router.use('/agent/tools', toolsRoutes); // AI 工具路由
@@ -48,6 +54,12 @@ router.use('/ai', aiRoutes);  // 智能AI助手
 // 结构化推荐 API
 router.use('/recommendations', structuredRecommendationRoutes);  // 结构化推荐接口
 
+// 管理员路由
+router.use('/admin', adminRoutes);
+
+// 收藏路由
+router.use('/favorites', favoriteRoutes);
+
 // 健康检查接口
 router.get('/health', (req, res) => {
   res.json({
@@ -57,5 +69,3 @@ router.get('/health', (req, res) => {
 });
 
 export default router;
-import adminRoutes from './admin.routes';
-router.use('/admin', adminRoutes);

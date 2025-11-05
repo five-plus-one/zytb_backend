@@ -25,6 +25,11 @@ export class EnrollmentPlanSearchController {
         minScore,
         maxScore,
         userScore,
+        minTuition,
+        maxTuition,
+        minPlanCount,
+        maxPlanCount,
+        subjectRequirement,
         page = 1,
         pageSize = 20
       } = req.query;
@@ -88,6 +93,29 @@ export class EnrollmentPlanSearchController {
         queryBuilder.andWhere('ep.collegeCity = :city', { city });
       }
 
+      // 学费范围
+      if (minTuition) {
+        queryBuilder.andWhere('ep.tuition >= :minTuition', { minTuition });
+      }
+      if (maxTuition) {
+        queryBuilder.andWhere('ep.tuition <= :maxTuition', { maxTuition });
+      }
+
+      // 招生人数范围
+      if (minPlanCount) {
+        queryBuilder.andWhere('ep.planCount >= :minPlanCount', { minPlanCount });
+      }
+      if (maxPlanCount) {
+        queryBuilder.andWhere('ep.planCount <= :maxPlanCount', { maxPlanCount });
+      }
+
+      // 选科要求
+      if (subjectRequirement) {
+        queryBuilder.andWhere('ep.subjectRequirements LIKE :subjectRequirement', {
+          subjectRequirement: `%${subjectRequirement}%`
+        });
+      }
+
       // 分数范围（基于历年数据匹配）
       if (minScore || maxScore || userScore) {
         queryBuilder.leftJoinAndSelect('ep.group', 'epg');
@@ -126,8 +154,8 @@ export class EnrollmentPlanSearchController {
         .take(limit)
         .getMany();
 
-      // 按专业组聚合
-      const groupedPlans = this.groupByMajorGroup(plans);
+      // 按专业组聚合（包含groupId、统计信息、最近分数）
+      const groupedPlans = await this.groupByMajorGroupWithDetails(plans, parseInt(year as string));
 
       const result = {
         total,
@@ -148,40 +176,85 @@ export class EnrollmentPlanSearchController {
   }
 
   /**
-   * 按专业组聚合招生计划
+   * 按专业组聚合招生计划，并添加groupId、统计信息、最近分数
    */
-  private groupByMajorGroup(plans: EnrollmentPlan[]) {
+  private async groupByMajorGroupWithDetails(plans: EnrollmentPlan[], year: number) {
     const groupMap = new Map();
+    const admissionScoreRepo = AppDataSource.getRepository(require('../models/AdmissionScore').AdmissionScore);
 
     for (const plan of plans) {
       const key = `${plan.collegeCode}_${plan.majorGroupCode}`;
 
       if (!groupMap.has(key)) {
+        // 生成groupId
+        const groupId = plan.groupId || `${plan.collegeCode}_${plan.majorGroupCode}_${year}_${plan.sourceProvince}`;
+
         groupMap.set(key, {
+          groupId,
           collegeCode: plan.collegeCode,
           collegeName: plan.collegeName,
           collegeProvince: plan.collegeProvince,
           collegeCity: plan.collegeCity,
+          collegeType: plan.college?.type || '',
           is985: plan.collegeIs985,
           is211: plan.collegeIs211,
           isDoubleFirstClass: plan.collegeIsWorldClass,
           groupCode: plan.majorGroupCode,
           groupName: plan.majorGroupName,
-          majors: []
+          subjectRequirement: plan.subjectRequirements || '',
+          totalPlanCount: 0,
+          avgTuition: 0,
+          majors: [],
+          recentScores: []
         });
       }
 
       const group = groupMap.get(key);
+      group.totalPlanCount += plan.planCount || 0;
+
       group.majors.push({
         majorCode: plan.majorCode,
         majorName: plan.majorName,
         planCount: plan.planCount,
-        tuition: plan.tuition,
+        tuition: plan.tuition ? plan.tuition.toString() : '0',
         studyYears: plan.studyYears
       });
     }
 
-    return Array.from(groupMap.values());
+    // 计算平均学费并查询最近分数
+    const groupsArray = Array.from(groupMap.values());
+
+    await Promise.all(groupsArray.map(async (group) => {
+      // 计算平均学费
+      const totalTuition = group.majors.reduce((sum: number, m: any) =>
+        sum + (parseFloat(m.tuition) || 0), 0);
+      group.avgTuition = group.majors.length > 0
+        ? Math.round(totalTuition / group.majors.length)
+        : 0;
+
+      // 查询最近2年分数
+      try {
+        const recentScores = await admissionScoreRepo
+          .createQueryBuilder('as')
+          .where('as.collegeCode = :collegeCode', { collegeCode: group.collegeCode })
+          .andWhere('as.groupCode = :groupCode', { groupCode: group.groupCode })
+          .andWhere('as.year >= :startYear', { startYear: year - 2 })
+          .orderBy('as.year', 'DESC')
+          .limit(2)
+          .getMany();
+
+        group.recentScores = recentScores.map((score: any) => ({
+          year: score.year,
+          minScore: score.minScore,
+          minRank: score.minRank
+        }));
+      } catch (err) {
+        console.error('查询历年分数失败:', err);
+        group.recentScores = [];
+      }
+    }));
+
+    return groupsArray;
   }
 
   /**
