@@ -30,27 +30,62 @@ export class GroupDetailController {
         return ResponseUtil.success(res, JSON.parse(cached));
       }
 
-      // 解析groupId: collegeCode_groupCode_year_province
-      const parts = groupId.split('_');
-      if (parts.length < 4) {
-        return ResponseUtil.badRequest(res, '无效的groupId格式');
-      }
+      let plans: EnrollmentPlan[] = [];
+      let collegeCode: string;
+      let groupCode: string;
+      let year: number;
+      let province: string;
 
-      const [collegeCode, groupCode, year, province] = parts;
+      // 判断groupId格式
+      // UUID格式: 9434f64a-1c90-49e1-94c5-cc0701340471 (包含连字符，长度36)
+      // 自定义格式: collegeCode_groupCode_year_province
+      if (groupId.includes('-') && groupId.length === 36) {
+        // UUID格式 - 直接通过group_id查询
+        console.log(`📋 使用UUID查询专业组: ${groupId}`);
 
-      // 1. 查询专业组基本信息
-      const plans = await this.planRepo.find({
-        where: {
-          collegeCode,
-          majorGroupCode: groupCode,
-          year: parseInt(year),
-          sourceProvince: province
-        },
-        relations: ['college']
-      });
+        plans = await this.planRepo.find({
+          where: { groupId },
+          relations: ['college']
+        });
 
-      if (plans.length === 0) {
-        return ResponseUtil.error(res, '专业组不存在', 404);
+        if (plans.length === 0) {
+          return ResponseUtil.error(res, '专业组不存在', 404);
+        }
+
+        // 从第一条记录提取信息
+        const firstPlan = plans[0];
+        collegeCode = firstPlan.collegeCode;
+        groupCode = firstPlan.majorGroupCode || '';
+        year = firstPlan.year;
+        province = firstPlan.sourceProvince;
+      } else {
+        // 自定义格式 - 解析并查询
+        console.log(`📋 使用自定义格式查询专业组: ${groupId}`);
+
+        const parts = groupId.split('_');
+        if (parts.length < 4) {
+          return ResponseUtil.badRequest(res, '无效的groupId格式，应为 collegeCode_groupCode_year_province 或 UUID格式');
+        }
+
+        collegeCode = parts[0];
+        groupCode = parts[1];
+        year = parseInt(parts[2]);
+        province = parts[3];
+
+        // 查询专业组基本信息
+        plans = await this.planRepo.find({
+          where: {
+            collegeCode,
+            majorGroupCode: groupCode,
+            year,
+            sourceProvince: province
+          },
+          relations: ['college']
+        });
+
+        if (plans.length === 0) {
+          return ResponseUtil.error(res, '专业组不存在', 404);
+        }
       }
 
       const firstPlan = plans[0];
@@ -79,7 +114,7 @@ export class GroupDetailController {
         .createQueryBuilder('score')
         .where('score.collegeCode = :collegeCode', { collegeCode })
         .andWhere('score.groupCode = :groupCode', { groupCode })
-        .andWhere('score.year >= :startYear', { startYear: parseInt(year) - 5 })
+        .andWhere('score.year >= :startYear', { startYear: year - 5 })
         .orderBy('score.year', 'DESC')
         .getMany();
 
@@ -130,7 +165,7 @@ export class GroupDetailController {
           is985: firstPlan.collegeIs985,
           is211: firstPlan.collegeIs211,
           isDoubleFirstClass: firstPlan.collegeIsWorldClass,
-          year: parseInt(year),
+          year,
           batch: firstPlan.batch
         },
         majors: majorsWithDetails,

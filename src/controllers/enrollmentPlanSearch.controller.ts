@@ -72,14 +72,24 @@ export class EnrollmentPlanSearchController {
         queryBuilder.andWhere('ep.subjectType = :subjectType', { subjectType });
       }
 
-      // 院校层次
+      // 院校层次 - 支持逗号分隔的多个值（如 "985,211"）
       if (collegeLevel) {
-        if (collegeLevel === '985') {
-          queryBuilder.andWhere('ep.collegeIs985 = 1');
-        } else if (collegeLevel === '211') {
-          queryBuilder.andWhere('ep.collegeIs211 = 1');
-        } else if (collegeLevel === 'double_first_class') {
-          queryBuilder.andWhere('ep.collegeIsWorldClass = 1');
+        const levels = (collegeLevel as string).split(',').map(l => l.trim());
+        const conditions: string[] = [];
+
+        if (levels.includes('985')) {
+          conditions.push('ep.collegeIs985 = 1');
+        }
+        if (levels.includes('211')) {
+          conditions.push('ep.collegeIs211 = 1');
+        }
+        if (levels.includes('double_first_class') || levels.includes('双一流')) {
+          conditions.push('ep.collegeIsWorldClass = 1');
+        }
+
+        if (conditions.length > 0) {
+          // 使用 OR 连接多个条件（满足任一即可）
+          queryBuilder.andWhere(`(${conditions.join(' OR ')})`);
         }
       }
 

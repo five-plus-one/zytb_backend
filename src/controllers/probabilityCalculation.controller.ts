@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../config/database';
 import { AdmissionScore } from '../models/AdmissionScore';
+import { EnrollmentPlan } from '../models/EnrollmentPlan';
 import { ResponseUtil } from '../utils/response';
 
 export class ProbabilityCalculationController {
   private scoreRepo = AppDataSource.getRepository(AdmissionScore);
+  private planRepo = AppDataSource.getRepository(EnrollmentPlan);
 
   /**
    * 计算录取概率
@@ -18,13 +20,36 @@ export class ProbabilityCalculationController {
         return ResponseUtil.badRequest(res, '缺少必要参数');
       }
 
-      // 解析groupId
-      const parts = groupId.split('_');
-      if (parts.length < 2) {
-        return ResponseUtil.badRequest(res, '无效的groupId格式');
-      }
+      let collegeCode: string;
+      let groupCode: string;
 
-      const [collegeCode, groupCode] = parts;
+      // 判断groupId格式
+      if (groupId.includes('-') && groupId.length === 36) {
+        // UUID格式 - 查询获取collegeCode和groupCode
+        console.log(`📊 使用UUID查询录取概率: ${groupId}`);
+
+        const plan = await this.planRepo.findOne({
+          where: { groupId }
+        });
+
+        if (!plan) {
+          return ResponseUtil.error(res, '专业组不存在', 404);
+        }
+
+        collegeCode = plan.collegeCode;
+        groupCode = plan.majorGroupCode || '';
+      } else {
+        // 自定义格式 - 直接解析
+        console.log(`📊 使用自定义格式查询录取概率: ${groupId}`);
+
+        const parts = groupId.split('_');
+        if (parts.length < 2) {
+          return ResponseUtil.badRequest(res, '无效的groupId格式');
+        }
+
+        collegeCode = parts[0];
+        groupCode = parts[1];
+      }
 
       // 查询历年录取分数（最近5年）
       const historicalScores = await this.scoreRepo
