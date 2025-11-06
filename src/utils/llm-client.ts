@@ -3,12 +3,20 @@ import { RequestQueue, retryWithBackoff, withTimeout } from './queue';
 
 /**
  * LLM API客户端
- * 支持OpenAI兼容的API接口
+ * 支持OpenAI兼容的API接口和Claude API的Content Blocks
  */
+
+/**
+ * Claude API Content Block 类型定义
+ */
+export type LLMContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: any }
+  | { type: 'tool_result'; tool_use_id: string; content: string | any[]; is_error?: boolean };
 
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | LLMContentBlock[];  // ✅ 支持两种格式：纯文本或content blocks
 }
 
 export interface LLMCompletionRequest {

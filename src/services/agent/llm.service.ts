@@ -27,7 +27,17 @@ export class LLMService {
       max_tokens: options?.maxTokens ?? 2000
     });
 
-    return response.choices[0]?.message?.content || '';
+    const content = response.choices[0]?.message?.content;
+    // ✅ 处理content可能是string或LLMContentBlock[]
+    if (typeof content === 'string') {
+      return content;
+    } else if (Array.isArray(content)) {
+      return content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('\n');
+    }
+    return '';
   }
 
   /**
@@ -98,7 +108,19 @@ export class LLMService {
 
     const responses = await this.client.batchCompletions(requests);
 
-    return responses.map(res => res.choices[0]?.message?.content || '');
+    // ✅ 处理content可能是string或LLMContentBlock[]
+    return responses.map(res => {
+      const content = res.choices[0]?.message?.content;
+      if (typeof content === 'string') {
+        return content;
+      } else if (Array.isArray(content)) {
+        return content
+          .filter((block: any) => block.type === 'text')
+          .map((block: any) => block.text)
+          .join('\n');
+      }
+      return '';
+    });
   }
 
   /**

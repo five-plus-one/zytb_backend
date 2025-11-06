@@ -10,6 +10,14 @@ import {
 import { AgentSession } from './AgentSession';
 
 /**
+ * Claude API Content Block 类型定义
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: any }
+  | { type: 'tool_result'; tool_use_id: string; content: string | any[]; is_error?: boolean };
+
+/**
  * 智能体消息表
  * 记录会话中的每一条消息
  */
@@ -35,8 +43,17 @@ export class AgentMessage {
   })
   role!: string;
 
-  @Column({ type: 'text', comment: '消息内容' })
+  @Column({ type: 'text', comment: '消息内容（纯文本，用于兼容和搜索）' })
   content!: string;
+
+  // ========== 结构化内容块（新增）==========
+  @Column({
+    name: 'content_blocks',
+    type: 'json',
+    nullable: true,
+    comment: 'Claude API原始内容块(支持text、tool_use、tool_result等类型)'
+  })
+  contentBlocks?: ContentBlock[];
 
   // ========== 结构化数据 ==========
   @Column({

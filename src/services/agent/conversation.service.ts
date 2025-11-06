@@ -125,12 +125,14 @@ export class ConversationService {
     content: string,
     messageType: 'chat' | 'preference_update' | 'recommendation' | 'system_notification' = 'chat',
     extractedData?: any,
-    metadata?: any
+    metadata?: any,
+    contentBlocks?: any[]  // ✅ 新增参数：支持Claude API的content blocks
   ): Promise<AgentMessage> {
     const message = this.messageRepo.create({
       sessionId,
       role,
       content,
+      contentBlocks,  // ✅ 保存结构化内容
       messageType,
       extractedData,
       metadata

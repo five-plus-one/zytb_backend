@@ -486,6 +486,7 @@ export class AgentService {
         id: msg.id,
         role: msg.role,
         content: msg.content,
+        contentBlocks: msg.contentBlocks,  // ✅ 新增：返回结构化内容块
         messageType: msg.messageType,
         extractedData: msg.extractedData,
         metadata: msg.metadata,
@@ -608,5 +609,26 @@ export class AgentService {
     if (session.stage === 'init' && session.totalMessages > 2) {
       await this.conversationService.updateStage(session.id, 'core_preferences');
     }
+  }
+
+  /**
+   * ✅ 从content blocks中提取纯文本内容
+   * 用于向后兼容和搜索功能
+   */
+  private extractTextFromContentBlocks(content: any): string {
+    // 如果已经是字符串，直接返回
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    // 如果是content blocks数组
+    if (Array.isArray(content)) {
+      return content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('\n');
+    }
+
+    return '';
   }
 }
