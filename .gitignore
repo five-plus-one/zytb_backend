@@ -9,3 +9,5 @@ uploads/
 .idea/
 coverage/
 .claude/settings.local.json
+.env.development
+.env.production
