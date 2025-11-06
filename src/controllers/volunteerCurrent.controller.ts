@@ -7,6 +7,7 @@ import { AdmissionScore } from '../models/AdmissionScore';
 import { ResponseUtil } from '../utils/response';
 import { AuthRequest } from '../types';
 import { volunteerPositionService } from '../services/volunteerPosition.service';
+import { AdmissionProbabilityService } from '../services/admissionProbability.service';
 
 export class VolunteerCurrentController {
   private tableRepo = AppDataSource.getRepository(VolunteerTable);
@@ -15,6 +16,7 @@ export class VolunteerCurrentController {
   private majorRepo = AppDataSource.getRepository(VolunteerMajor);
   private planRepo = AppDataSource.getRepository(EnrollmentPlan);
   private scoreRepo = AppDataSource.getRepository(AdmissionScore);
+  private probabilityService = new AdmissionProbabilityService();
 
   /**
    * 获取当前志愿表的当前批次（辅助方法）
@@ -76,19 +78,69 @@ export class VolunteerCurrentController {
       // 丰富每个专业组的数据
       const groupsWithDetails = await Promise.all(
         groups.map(async (group) => {
-          // 查询最近分数
-          const recentScore = await this.scoreRepo.findOne({
-            where: { collegeCode: group.collegeCode, groupCode: group.groupCode },
-            order: { year: 'DESC' }
+          // 查询最近3年的录取分数（用于计算冲稳保）
+          const historicalScores = await this.scoreRepo.find({
+            where: {
+              collegeCode: group.collegeCode,
+              groupCode: group.groupCode
+            },
+            order: { year: 'DESC' },
+            take: 3
           });
 
-          // 计算分类
+          // 使用统一的概率计算服务计算冲稳保
           let category: 'rush' | 'stable' | 'safe' = 'stable';
-          if (recentScore && batch.score) {
-            const diff = batch.score - (recentScore.minScore || 0);
-            if (diff >= 20) category = 'safe';
-            else if (diff < -10) category = 'rush';
+          let probability: number | null = null;
+
+          // 确保有历史数据、分数和位次才计算
+          if (historicalScores.length > 0 && batch.score && batch.score > 0 && batch.rank && batch.rank > 0) {
+            const groupHistory = historicalScores.map(score => ({
+              year: score.year,
+              minScore: score.minScore || 0,
+              avgScore: score.avgScore,
+              maxScore: score.maxScore,
+              minRank: score.minRank || 0,
+              maxRank: score.maxRank,
+              planCount: score.planCount || 0
+            }));
+
+            const result = this.probabilityService.calculateForGroup(
+              batch.score,
+              batch.rank,
+              groupHistory
+            );
+
+            probability = result.probability;
+
+            // 使用统一的冲稳保标准
+            if (result.riskLevel === '冲') {
+              category = 'rush';
+            } else if (result.riskLevel === '保') {
+              category = 'safe';
+            } else {
+              category = 'stable';
+            }
+          } else {
+            // 如果没有位次但有分数，使用简化算法
+            if (historicalScores.length > 0 && batch.score && batch.score > 0) {
+              const avgMinScore = historicalScores.reduce((sum, s) => sum + (s.minScore || 0), 0) / historicalScores.length;
+              const scoreGap = batch.score - avgMinScore;
+
+              console.log(`[简化算法] ${group.collegeName} ${group.groupCode}: scoreGap=${scoreGap.toFixed(1)}, avgMinScore=${avgMinScore}`);
+
+              // 使用与AdmissionProbabilityService一致的标准
+              if (scoreGap < -10) {
+                category = 'rush';
+              } else if (scoreGap > 15) {
+                category = 'safe';
+              } else {
+                category = 'stable';
+              }
+            }
           }
+
+          // 获取最近一年的分数用于显示
+          const recentScore = historicalScores.length > 0 ? historicalScores[0] : null;
 
           return {
             id: group.id,
@@ -109,6 +161,7 @@ export class VolunteerCurrentController {
               duration: m.duration
             })),
             category,
+            probability,
             recentScore: recentScore ? {
               year: recentScore.year,
               minScore: recentScore.minScore,

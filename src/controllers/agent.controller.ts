@@ -264,24 +264,31 @@ export class AgentController {
   }
 
   /**
-   * 获取会话的完整对话内容
+   * 获取会话的完整对话内容（增强版 - P1）
    * GET /api/agent/session/:sessionId/messages
    */
   static async getSessionMessages(req: Request, res: Response): Promise<void> {
     try {
       const { sessionId } = req.params;
-      const userId = (req as any).userId; // 从 authMiddleware 获取
+      const userId = (req as any).userId;
 
       if (!userId) {
         ResponseUtil.unauthorized(res);
         return;
       }
 
-      // 获取分页参数
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+      // 获取分页和过滤参数
+      const options = {
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 100,
+        offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+        roleFilter: req.query.roleFilter as 'user' | 'assistant' | 'system' | undefined,
+        messageTypeFilter: req.query.messageTypeFilter as string | undefined,
+        searchKeyword: req.query.searchKeyword as string | undefined,
+        startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+        endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined
+      };
 
-      const result = await agentService.getSessionMessages(sessionId, userId, limit, offset);
+      const result = await agentService.getSessionMessages(sessionId, userId, options);
 
       if (!result) {
         ResponseUtil.notFound(res, 'Session not found or access denied');
@@ -395,6 +402,97 @@ export class AgentController {
       ResponseUtil.success(res, { message: 'Cache cleared successfully' });
     } catch (error: any) {
       console.error('Clear cache error:', error);
+      ResponseUtil.error(res, error.message);
+    }
+  }
+
+  /**
+   * 切换会话模式（P1功能）
+   * POST /api/agent/session/:sessionId/switch-mode
+   */
+  static async switchSessionMode(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).userId;
+      const { sessionId } = req.params;
+      const { mode } = req.body;
+
+      if (!userId) {
+        ResponseUtil.unauthorized(res);
+        return;
+      }
+
+      if (!mode || (mode !== 'quick' && mode !== 'deep')) {
+        ResponseUtil.badRequest(res, 'Mode must be "quick" or "deep"');
+        return;
+      }
+
+      // 更新会话模式
+      const conversationService = (agentService as any).conversationService;
+      const session = await conversationService.getSession(sessionId);
+
+      if (!session || session.userId !== userId) {
+        ResponseUtil.notFound(res, 'Session not found or access denied');
+        return;
+      }
+
+      await conversationService.sessionRepo.update(
+        { id: sessionId },
+        { mode }
+      );
+
+      ResponseUtil.success(res, {
+        sessionId,
+        mode,
+        message: `Session mode switched to ${mode}`
+      });
+    } catch (error: any) {
+      console.error('Switch session mode error:', error);
+      ResponseUtil.error(res, error.message);
+    }
+  }
+
+  /**
+   * 获取会话能力（P1功能）
+   * GET /api/agent/session/:sessionId/capabilities
+   */
+  static async getSessionCapabilities(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).userId;
+      const { sessionId } = req.params;
+
+      if (!userId) {
+        ResponseUtil.unauthorized(res);
+        return;
+      }
+
+      const conversationService = (agentService as any).conversationService;
+      const session = await conversationService.getSession(sessionId);
+
+      if (!session || session.userId !== userId) {
+        ResponseUtil.notFound(res, 'Session not found or access denied');
+        return;
+      }
+
+      // 根据会话状态返回可用能力
+      const capabilities = {
+        canChat: session.status === 'active',
+        canGenerateRecommendations: session.corePreferencesCount >= 30 && session.stage !== 'init',
+        canSwitchMode: true,
+        canCreateSnapshot: session.totalMessages > 0,
+        canMerge: false, // 主会话不支持合并
+        currentMode: session.mode,
+        currentStage: session.stage,
+        features: {
+          toolCalling: session.mode === 'deep',
+          quickResponse: session.mode === 'quick',
+          preferenceCollection: session.stage === 'core_preferences' || session.stage === 'secondary_preferences',
+          recommendation: session.stage === 'generating' || session.stage === 'refining' || session.stage === 'completed'
+        }
+      };
+
+      ResponseUtil.success(res, capabilities);
+    } catch (error: any) {
+      console.error('Get session capabilities error:', error);
       ResponseUtil.error(res, error.message);
     }
   }

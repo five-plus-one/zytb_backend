@@ -187,11 +187,11 @@ export class CompareGroupsTool extends Tool {
     },
     groups: {
       type: 'array',
-      description: '要对比的专业组列表',
+      description: '要对比的专业组列表。每个元素需包含：collegeName（院校名称，支持模糊搜索）或 collegeCode（院校代码）+ groupCode（专业组代码）',
       required: true,
       items: {
         type: 'object',
-        description: '专业组信息（collegeCode和groupCode）'
+        description: '专业组信息，格式：{collegeName: "南京大学", groupCode: "01"} 或 {collegeCode: "1101", groupCode: "01"}'
       }
     }
   };

@@ -454,14 +454,31 @@ export class AgentService {
   }
 
   /**
-   * 获取会话的完整对话内容
+   * 获取会话的完整对话内容（增强版，支持过滤和搜索 - P1）
    */
   async getSessionMessages(
     sessionId: string,
     userId: string,
-    limit: number = 100,
-    offset: number = 0
+    options: {
+      limit?: number;
+      offset?: number;
+      roleFilter?: 'user' | 'assistant' | 'system';
+      messageTypeFilter?: string;
+      searchKeyword?: string;
+      startDate?: Date;
+      endDate?: Date;
+    } = {}
   ): Promise<any> {
+    const {
+      limit = 100,
+      offset = 0,
+      roleFilter,
+      messageTypeFilter,
+      searchKeyword,
+      startDate,
+      endDate
+    } = options;
+
     // 首先验证会话是否存在并且属于该用户
     const session = await this.conversationService.getSession(sessionId);
 
@@ -473,20 +490,52 @@ export class AgentService {
       throw new Error('Access denied');
     }
 
-    // 获取消息
-    const messages = await this.conversationService.getMessages(sessionId, limit, offset);
+    // 构建查询条件
+    const whereConditions: any = { sessionId };
 
-    // 获取总消息数
+    if (roleFilter) {
+      whereConditions.role = roleFilter;
+    }
+
+    if (messageTypeFilter) {
+      whereConditions.messageType = messageTypeFilter;
+    }
+
+    // 获取消息
+    const messages = await this.conversationService.getMessagesWithFilters(
+      sessionId,
+      {
+        roleFilter,
+        messageTypeFilter,
+        searchKeyword,
+        startDate,
+        endDate
+      },
+      limit,
+      offset
+    );
+
+    const filteredTotal = messages.length; // 简化版：使用返回的消息数量
+
+    // 获取总消息数（不考虑过滤）
     const totalMessages = session.totalMessages;
 
     return {
       sessionId: session.id,
       totalMessages,
+      filteredTotal, // 过滤后的总数
+      filters: {
+        roleFilter,
+        messageTypeFilter,
+        searchKeyword,
+        startDate,
+        endDate
+      },
       messages: messages.map(msg => ({
         id: msg.id,
         role: msg.role,
         content: msg.content,
-        contentBlocks: msg.contentBlocks,  // ✅ 新增：返回结构化内容块
+        contentBlocks: msg.contentBlocks,
         messageType: msg.messageType,
         extractedData: msg.extractedData,
         metadata: msg.metadata,
@@ -495,7 +544,7 @@ export class AgentService {
       pagination: {
         limit,
         offset,
-        hasMore: offset + messages.length < totalMessages
+        hasMore: offset + messages.length < filteredTotal
       }
     };
   }

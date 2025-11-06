@@ -7,6 +7,7 @@ import { College } from '../models/College';
 import { Major } from '../models/Major';
 import { ResponseUtil } from '../utils/response';
 import cacheService from '../services/cache.service';
+import { LLMService } from '../services/agent/llm.service';
 
 export class GroupDetailController {
   private groupRepo = AppDataSource.getRepository(EnrollmentPlanGroup);
@@ -14,6 +15,11 @@ export class GroupDetailController {
   private scoreRepo = AppDataSource.getRepository(AdmissionScore);
   private collegeRepo = AppDataSource.getRepository(College);
   private majorRepo = AppDataSource.getRepository(Major);
+  private llmService: LLMService;
+
+  constructor() {
+    this.llmService = new LLMService();
+  }
 
   /**
    * 获取专业组详细信息
@@ -190,6 +196,19 @@ export class GroupDetailController {
       const totalTuition = plans.reduce((sum, p) => sum + (p.tuition || 0), 0);
       const avgTuition = plans.length > 0 ? Math.round(totalTuition / plans.length) : 0;
 
+      // 6. 生成AI洞察 (P1增强功能)
+      let aiInsights = null;
+      const includeAI = req.query.includeAI === 'true';
+
+      if (includeAI) {
+        try {
+          aiInsights = await this.generateAIInsights(firstPlan, majorsWithDetails, scoresData, college);
+        } catch (error) {
+          console.error('AI洞察生成失败:', error);
+          // 失败时不影响主流程
+        }
+      }
+
       const result = {
         groupInfo: {
           groupId,
@@ -210,7 +229,8 @@ export class GroupDetailController {
         },
         majors: majorsWithDetails,
         historicalScores: scoresData,
-        collegeInfo
+        collegeInfo,
+        aiInsights  // 添加AI洞察
       };
 
       // 缓存30分钟
@@ -445,6 +465,75 @@ export class GroupDetailController {
     } catch (error: any) {
       console.error('Compare groups error:', error);
       ResponseUtil.error(res, error.message);
+    }
+  }
+
+  /**
+   * 生成AI洞察 (P1增强功能)
+   * @private
+   */
+  private async generateAIInsights(
+    firstPlan: any,
+    majors: any[],
+    scores: any[],
+    college: any
+  ): Promise<any> {
+    const prompt = `
+你是一个高考志愿填报专家。请基于以下信息，为这个专业组生成简洁的AI洞察（不超过200字）：
+
+院校信息:
+- 院校名称: ${firstPlan.collegeName}
+- 院校层次: ${firstPlan.collegeIs985 ? '985' : firstPlan.collegeIs211 ? '211' : firstPlan.collegeIsWorldClass ? '双一流' : '普通'}
+- 所在城市: ${firstPlan.collegeCity}, ${firstPlan.collegeProvince}
+
+专业组信息:
+- 专业组代码: ${firstPlan.majorGroupCode}
+- 专业组名称: ${firstPlan.majorGroupName || '未知'}
+- 选考要求: ${firstPlan.subjectRequirements || '无特殊要求'}
+- 包含专业数: ${majors.length}个
+- 主要专业: ${majors.slice(0, 3).map(m => m.majorName).join('、')}
+
+历史录取:
+${scores.length > 0 ? scores.slice(0, 3).map(s =>
+  `- ${s.year}年: 最低分${s.minScore}，最低位次${s.minRank || '未知'}`
+).join('\n') : '暂无历史录取数据'}
+
+请从以下维度给出洞察:
+1. 院校优势（1-2句话）
+2. 专业特点（1-2句话）
+3. 录取趋势（1句话）
+4. 报考建议（1句话）
+
+请用JSON格式返回:
+{
+  "collegeAdvantages": "院校优势",
+  "majorFeatures": "专业特点",
+  "admissionTrend": "录取趋势",
+  "suggestion": "报考建议"
+}
+`;
+
+    try {
+      const response = await this.llmService.chat([
+        { role: 'system', content: '你是一个专业的高考志愿填报顾问。' },
+        { role: 'user', content: prompt }
+      ], {
+        temperature: 0.7,
+        maxTokens: 500
+      });
+
+      // 尝试解析JSON
+      const insights = JSON.parse(response);
+      return insights;
+    } catch (error) {
+      console.error('AI洞察解析失败:', error);
+      // 返回默认洞察
+      return {
+        collegeAdvantages: `${firstPlan.collegeName}是一所${firstPlan.collegeIs985 ? '985' : firstPlan.collegeIs211 ? '211' : '综合性'}院校，具有较强的综合实力。`,
+        majorFeatures: `该专业组包含${majors.length}个专业方向，为学生提供多元化选择。`,
+        admissionTrend: scores.length > 0 ? `近年录取分数线相对${scores[0].minScore > scores[scores.length - 1]?.minScore ? '上升' : '稳定'}。` : '暂无历史数据。',
+        suggestion: '建议结合个人兴趣和职业规划综合考虑。'
+      };
     }
   }
 }

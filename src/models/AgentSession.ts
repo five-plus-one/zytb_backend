@@ -52,6 +52,14 @@ export class AgentSession {
 
   @Column({
     type: 'enum',
+    enum: ['quick', 'deep'],
+    default: 'deep',
+    comment: '会话模式'
+  })
+  mode!: 'quick' | 'deep';
+
+  @Column({
+    type: 'enum',
     enum: ['active', 'paused', 'completed'],
     default: 'active',
     comment: '会话状态'
