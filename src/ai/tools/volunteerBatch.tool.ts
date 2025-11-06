@@ -6,9 +6,14 @@ import { VolunteerManagementService } from '../../services/volunteerManagement.s
  */
 export class CreateVolunteerBatchTool extends Tool {
   name = 'create_volunteer_batch';
-  description = '创建志愿批次：为用户创建一个新的志愿填报批次。用户首次填报志愿前必须先创建批次。江苏新高考一个批次可填40个专业组。适用场景："我要开始填志愿了""创建一个本科批次的志愿表"。注意：userId会自动从用户登录信息获取，无需传递。';
+  description = '创建志愿批次：为用户创建一个新的志愿填报批次。系统会自动为用户创建默认志愿表（如果还没有）。江苏新高考一个批次可填40个专业组。适用场景："我要开始填志愿了""创建一个本科批次的志愿表"。注意：userId会自动从用户登录信息获取，无需传递。';
 
   parameters: Record<string, ToolParameter> = {
+    tableId: {
+      type: 'string',
+      description: '志愿表ID（可选，不填则自动创建默认志愿表）',
+      required: false
+    },
     year: {
       type: 'number',
       description: '年份',
@@ -55,6 +60,7 @@ export class CreateVolunteerBatchTool extends Tool {
 
       const batch = await this.service.createBatch({
         userId,
+        tableId: params.tableId,
         year: params.year,
         batchType: params.batchType,
         province: params.province,
@@ -68,8 +74,9 @@ export class CreateVolunteerBatchTool extends Tool {
         data: batch,
         metadata: {
           dataSource: 'volunteer_batches',
-          description: `已创建${params.year}年${params.batchType}志愿批次`,
-          userId  // 返回userId供调试
+          description: `已创建${params.year}年${params.batchType}志愿批次${params.tableId ? '' : '，并自动创建默认志愿表'}`,
+          userId,
+          tableId: batch.tableId
         }
       };
     } catch (error: any) {

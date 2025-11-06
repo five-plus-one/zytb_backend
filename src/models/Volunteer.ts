@@ -12,6 +12,25 @@ import { User } from './User';
 import { College } from './College';
 import { Major } from './Major';
 
+/**
+ * @deprecated 此模型已废弃，请使用新的志愿表系统
+ *
+ * 新系统架构（4层）：
+ * - VolunteerTable（志愿表方案） - 支持多方案对比
+ *   └─ VolunteerBatch（志愿批次） - 本科批/专科批
+ *       └─ VolunteerGroup（专业组） - 最多40个
+ *           └─ VolunteerMajor（专业） - 每组最多6个
+ *
+ * 请使用以下文件：
+ * - 模型：src/models/VolunteerNew.ts (VolunteerBatch, VolunteerGroup, VolunteerMajor)
+ * - 模型：src/models/VolunteerTable.ts (VolunteerTable)
+ * - 服务：src/services/volunteerManagement.service.ts
+ * - 控制器：src/controllers/volunteerCurrent.controller.ts
+ * - AI工具：src/ai/tools/volunteerBatch.tool.ts
+ *
+ * 迁移时间：待定
+ * 删除时间：待定
+ */
 @Entity('volunteers')
 export class Volunteer {
   @PrimaryGeneratedColumn('uuid')

@@ -1,5 +1,6 @@
 import { AppDataSource } from '../config/database';
 import { VolunteerBatch, VolunteerGroup, VolunteerMajor } from '../models/VolunteerNew';
+import { VolunteerTable } from '../models/VolunteerTable';
 import { User } from '../models/User';
 import { Repository } from 'typeorm';
 
@@ -7,11 +8,13 @@ export class VolunteerManagementService {
   private batchRepo: Repository<VolunteerBatch>;
   private groupRepo: Repository<VolunteerGroup>;
   private majorRepo: Repository<VolunteerMajor>;
+  private tableRepo: Repository<VolunteerTable>;
 
   constructor() {
     this.batchRepo = AppDataSource.getRepository(VolunteerBatch);
     this.groupRepo = AppDataSource.getRepository(VolunteerGroup);
     this.majorRepo = AppDataSource.getRepository(VolunteerMajor);
+    this.tableRepo = AppDataSource.getRepository(VolunteerTable);
   }
 
   /**
@@ -67,9 +70,11 @@ export class VolunteerManagementService {
 
   /**
    * 创建志愿批次
+   * @param data.tableId - 志愿表ID（可选，不填则自动创建默认志愿表）
    */
   async createBatch(data: {
     userId: string;
+    tableId?: string;
     year: number;
     batchType: string;
     province: string;
@@ -88,7 +93,36 @@ export class VolunteerManagementService {
       throw new Error('用户不存在或未登录，请先登录后再创建志愿批次');
     }
 
-    const batch = this.batchRepo.create(data);
+    // ✅ 如果没有提供 tableId，自动创建或获取默认志愿表
+    let tableId = data.tableId;
+
+    if (!tableId) {
+      // 检查用户是否已有当前使用的志愿表
+      let table = await this.tableRepo.findOne({
+        where: { userId: data.userId, isCurrent: true }
+      });
+
+      if (!table) {
+        // 创建默认志愿表
+        table = this.tableRepo.create({
+          userId: data.userId,
+          name: `${data.year}年志愿方案`,
+          description: `${data.batchType}志愿填报方案`,
+          isCurrent: true
+        });
+        await this.tableRepo.save(table);
+        console.log(`✅ 自动为用户创建默认志愿表: ${table.name} (ID: ${table.id})`);
+      }
+
+      tableId = table.id;
+    }
+
+    // ✅ 创建批次时包含 tableId
+    const batch = this.batchRepo.create({
+      ...data,
+      tableId
+    });
+
     return await this.batchRepo.save(batch);
   }
 

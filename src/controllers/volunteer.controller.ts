@@ -3,6 +3,26 @@ import { VolunteerService } from '../services/volunteer.service';
 import { ResponseUtil } from '../utils/response';
 import { AuthRequest } from '../types';
 
+/**
+ * @deprecated 此控制器已废弃，请使用新的志愿表系统
+ *
+ * 旧系统问题：
+ * - 不支持江苏新高考的专业组结构
+ * - 缺少批次管理（本科批/专科批）
+ * - 不支持多方案对比
+ *
+ * 新系统控制器：
+ * - src/controllers/volunteerCurrent.controller.ts（推荐使用）
+ * - src/controllers/volunteerTableManagement.controller.ts
+ *
+ * 迁移说明：
+ * 1. 旧数据需要手动迁移到新表结构
+ * 2. 前端需要适配新的API接口
+ * 3. 新系统支持完整的4层架构：Table → Batch → Group → Major
+ *
+ * 计划删除时间：待定
+ */
+
 const volunteerService = new VolunteerService();
 
 export class VolunteerController {
