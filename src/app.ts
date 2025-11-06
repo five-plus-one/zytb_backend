@@ -10,7 +10,15 @@ import routes from './routes';
 import { errorHandler, notFoundHandler } from './middlewares/error';
 import { initializeTools } from './ai/tools';
 import { entityExtractionService } from './services/entityExtraction.service';
+import * as dotenv from 'dotenv';
 
+const envFile = process.env.NODE_ENV === 'production'
+  ? '.env.production'
+  : '.env.development';
+
+dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
+
+console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
 const app: Application = express();
 
 // 中间件配置
