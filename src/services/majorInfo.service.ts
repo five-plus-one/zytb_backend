@@ -189,7 +189,8 @@ export class MajorInfoService {
     sourceProvince: string;
     subjectType: string;
     groups: Array<{
-      collegeCode: string;
+      collegeCode?: string;
+      collegeName?: string;
       groupCode: string;
     }>;
   }) {
@@ -200,6 +201,7 @@ export class MajorInfoService {
           sourceProvince: params.sourceProvince,
           subjectType: params.subjectType,
           collegeCode: g.collegeCode,
+          collegeName: g.collegeName,
           groupCode: g.groupCode
         });
 

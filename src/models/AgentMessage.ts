@@ -84,6 +84,7 @@ export class AgentMessage {
     tokens?: number;
     processingTime?: number;
     confidence?: number;
+    [key: string]: any; // 允许额外的元数据字段
   };
 
   @CreateDateColumn({ name: 'created_at' })

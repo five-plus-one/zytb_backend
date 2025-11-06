@@ -156,6 +156,53 @@ export class ConversationService {
   }
 
   /**
+   * 获取会话的消息历史（带过滤）
+   */
+  async getMessagesWithFilters(
+    sessionId: string,
+    filters: {
+      roleFilter?: 'user' | 'assistant' | 'system';
+      messageTypeFilter?: string;
+      searchKeyword?: string;
+      startDate?: Date;
+      endDate?: Date;
+    },
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<AgentMessage[]> {
+    const queryBuilder = this.messageRepo.createQueryBuilder('message');
+
+    queryBuilder.where('message.sessionId = :sessionId', { sessionId });
+
+    if (filters.roleFilter) {
+      queryBuilder.andWhere('message.role = :role', { role: filters.roleFilter });
+    }
+
+    if (filters.messageTypeFilter) {
+      queryBuilder.andWhere('message.messageType = :messageType', { messageType: filters.messageTypeFilter });
+    }
+
+    if (filters.searchKeyword) {
+      queryBuilder.andWhere('message.content LIKE :keyword', { keyword: `%${filters.searchKeyword}%` });
+    }
+
+    if (filters.startDate) {
+      queryBuilder.andWhere('message.createdAt >= :startDate', { startDate: filters.startDate });
+    }
+
+    if (filters.endDate) {
+      queryBuilder.andWhere('message.createdAt <= :endDate', { endDate: filters.endDate });
+    }
+
+    queryBuilder
+      .orderBy('message.createdAt', 'ASC')
+      .skip(offset)
+      .take(limit);
+
+    return await queryBuilder.getMany();
+  }
+
+  /**
    * 获取会话的消息历史
    */
   async getMessages(
