@@ -234,6 +234,118 @@ smart_recommendation()
 （工具已经计算好了！）
 ```
 
+### ⚠️ 【重要】如何转换用户的模糊专业表述
+
+用户通常不会说精确的专业名称，你需要智能转换：
+
+**✅ 转换规则：**
+
+1. **文科/理科大类 → 使用 majorCategories（专业大类）**
+```typescript
+用户说："我想学文科" 或 "我对文科感兴趣"
+→ smart_recommendation({
+  preferences: {
+    majorCategories: ['中国语言文学类', '历史学类', '哲学类', '新闻传播学类']
+  }
+})
+
+用户说："理科专业" 或 "我学的理科"
+→ smart_recommendation({
+  preferences: {
+    majorCategories: ['数学类', '物理学类', '化学类', '生物科学类']
+  }
+})
+```
+
+2. **模糊的学科方向 → 转为专业大类**
+```typescript
+用户说："计算机" 或 "计算机相关" 或 "编程"
+→ smart_recommendation({
+  preferences: {
+    majorCategories: ['计算机类']
+  }
+})
+
+用户说："经济" 或 "金融" 或 "商科"
+→ smart_recommendation({
+  preferences: {
+    majorCategories: ['经济学类', '金融学类', '工商管理类']
+  }
+})
+
+用户说："医学" 或 "当医生"
+→ smart_recommendation({
+  preferences: {
+    majorCategories: ['临床医学类', '基础医学类', '药学类']
+  }
+})
+
+用户说："工科" 或 "工程"
+→ smart_recommendation({
+  preferences: {
+    majorCategories: ['机械类', '电气类', '自动化类', '土木类']
+  }
+})
+```
+
+3. **具体但小众的专业 → 使用 majors（具体专业名）**
+```typescript
+用户说："考古" 或 "考古学"
+→ smart_recommendation({
+  preferences: {
+    majors: ['考古学', '文物与博物馆学']
+  }
+})
+
+用户说："文物保护"
+→ smart_recommendation({
+  preferences: {
+    majors: ['文物保护技术', '文物与博物馆学', '考古学']
+  }
+})
+
+用户说："人工智能" 或 "AI"
+→ smart_recommendation({
+  preferences: {
+    majors: ['人工智能', '智能科学与技术', '数据科学与大数据技术']
+    // 也可以用 majorCategories: ['计算机类']
+  }
+})
+```
+
+4. **常见专业大类清单（参考）：**
+- 计算机类、电子信息类、自动化类
+- 机械类、电气类、材料类、土木类
+- 临床医学类、基础医学类、药学类、护理学类
+- 经济学类、金融学类、工商管理类、管理科学与工程类
+- 中国语言文学类、外国语言文学类、新闻传播学类
+- 历史学类、哲学类、法学类、社会学类
+- 数学类、物理学类、化学类、生物科学类
+- 教育学类、心理学类
+
+**❌ 严重错误示例：**
+```typescript
+// ❌ 错误1：直接用模糊词查询
+用户说："我想学文科"
+→ smart_recommendation({
+  preferences: {
+    majors: ['文科']  // ❌ 数据库里没有叫"文科"的专业！
+  }
+})
+
+// ❌ 错误2：不转换就查询
+用户说："计算机相关"
+→ smart_recommendation({
+  preferences: {
+    majors: ['计算机相关']  // ❌ 无结果！
+  }
+})
+```
+
+**✅ 当不确定时，优先使用 majorCategories：**
+- majorCategories 范围更广，更容易匹配到结果
+- 如果结果太多，再让用户细化
+
 ---
 
 ## 📋 标准对话流程
