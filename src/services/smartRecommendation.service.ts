@@ -133,12 +133,23 @@ export class SmartRecommendationService {
     preferences: UserPreferences
   ): Promise<Array<GroupRecommendation & { historicalData: GroupHistoricalData[]; scoreVolatility?: number; popularityIndex?: number }>> {
 
+    // ⚠️ 重要：容错处理 - 确保科类格式正确
+    // 数据库中存储的是"物理类"、"历史类"，但用户可能传入"物理"、"历史"
+    let normalizedCategory = userProfile.category;
+    if (normalizedCategory === '物理') {
+      normalizedCategory = '物理类';
+    } else if (normalizedCategory === '历史') {
+      normalizedCategory = '历史类';
+    }
+
+    console.log(`[SmartRecommendation] 查询参数: 年份=${userProfile.year}, 省份=${userProfile.province}, 科类=${normalizedCategory} (原始值: ${userProfile.category})`);
+
     // 构建查询
     let queryBuilder = this.enrollmentPlanRepo
       .createQueryBuilder('ep')
       .where('ep.year = :year', { year: userProfile.year })
       .andWhere('ep.sourceProvince = :province', { province: userProfile.province })
-      .andWhere('ep.subjectType = :category', { category: userProfile.category });
+      .andWhere('ep.subjectType = :category', { category: normalizedCategory });
 
     // 应用专业偏好筛选
     if (preferences.majors && preferences.majors.length > 0) {
