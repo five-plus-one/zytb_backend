@@ -36,6 +36,18 @@ export class CoreCollege {
   @Column({ length: 50, nullable: true, name: 'college_type' })
   collegeType?: string;
 
+  // 兼容旧字段：type 映射到 collegeType
+  get type(): string | undefined {
+    return this.collegeType;
+  }
+
+  @Column({ type: 'int', nullable: true })
+  @Index()
+  rank?: number;
+
+  @Column({ type: 'text', nullable: true })
+  description?: string;
+
   @Column({ length: 100, nullable: true })
   affiliation?: string;
 
@@ -93,6 +105,11 @@ export class CoreCollege {
   @Column({ length: 100, nullable: true, name: 'admission_phone' })
   admissionPhone?: string;
 
+  // 兼容旧字段：phone 映射到 admissionPhone
+  get phone(): string | undefined {
+    return this.admissionPhone;
+  }
+
   @Column({ length: 100, nullable: true })
   email?: string;
 
@@ -140,6 +157,25 @@ export class CoreCollege {
 
   @Column({ type: 'decimal', precision: 3, scale: 1, nullable: true, name: 'overall_life_score' })
   overallLifeScore?: number;
+
+  // 兼容旧模型字段
+  @Column({ type: 'varchar', length: 50, nullable: true, comment: '院校等级' })
+  level?: string;
+
+  @Column({ type: 'int', nullable: true, name: 'min_score', comment: '最低分数' })
+  minScore?: number;
+
+  @Column({ type: 'int', nullable: true, name: 'avg_score', comment: '平均分数' })
+  avgScore?: number;
+
+  @Column({ type: 'int', nullable: true, name: 'key_discipline_count', comment: '重点学科数量' })
+  keyDisciplineCount?: number;
+
+  @Column({ type: 'json', nullable: true, comment: '院校特色' })
+  features?: string[];
+
+  @Column({ type: 'text', nullable: true, name: 'evaluation_result', comment: '评估结果' })
+  evaluationResult?: string;
 
   // 统计信息
   @Column({ type: 'int', default: 0, name: 'major_count' })

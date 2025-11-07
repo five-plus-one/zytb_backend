@@ -72,6 +72,9 @@ export class CoreAdmissionScore {
   @Column({ length: 50, nullable: true, name: 'major_discipline' })
   majorDiscipline?: string;
 
+  @Column({ length: 50, nullable: true, name: 'major_group' })
+  majorGroup?: string;
+
   // 基本信息
   @Column({ type: 'int', name: 'year' })
   @Index()

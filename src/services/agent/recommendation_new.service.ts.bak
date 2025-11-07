@@ -1,8 +1,8 @@
 import { AppDataSource } from '../../config/database';
-import { CoreCollege } from '../../models/core/CoreCollege';
-import { CoreMajor } from '../../models/core/CoreMajor';
-import { CoreEnrollmentPlan } from '../../models/core/CoreEnrollmentPlan';
-import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
+import { College } from '../../models/College';
+import { Major } from '../../models/Major';
+import { EnrollmentPlan } from '../../models/EnrollmentPlan';
+import { AdmissionScore } from '../../models/AdmissionScore';
 import { AgentPreference } from '../../models/AgentPreference';
 
 /**
@@ -182,9 +182,9 @@ export class NewRecommendationEngine {
     userPrefs: UserPreferences,
     limit: number
   ): Promise<CandidateVolunteer[]> {
-    const admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
-    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
-    const collegeRepo = AppDataSource.getRepository(CoreCollege);
+    const admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
+    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
+    const collegeRepo = AppDataSource.getRepository(College);
 
     // 1. 从admission_scores表拉取近3年的录取数据
     // 分数范围策略:
@@ -286,8 +286,8 @@ export class NewRecommendationEngine {
     userPrefs: UserPreferences,
     limit: number
   ): Promise<CandidateVolunteer[]> {
-    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
-    const collegeRepo = AppDataSource.getRepository(CoreCollege);
+    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
+    const collegeRepo = AppDataSource.getRepository(College);
 
     // 注意: enrollment_plans表的subjectType是"物理"/"历史", 而admission_scores是"物理类"/"历史类"
     const normalizedSubjectType = userPrefs.subjectType.replace('类', '');
@@ -355,7 +355,7 @@ export class NewRecommendationEngine {
     const weights = userPrefs.decisionWeights;
     const prefs = this.parsePreferences(userPrefs.preferences);
 
-    const collegeRepo = AppDataSource.getRepository(CoreCollege);
+    const collegeRepo = AppDataSource.getRepository(College);
     const college = await collegeRepo.findOne({ where: { name: candidate.collegeName } });
 
     if (!college) {
@@ -402,7 +402,7 @@ export class NewRecommendationEngine {
   /**
    * 计算院校得分
    */
-  private calculateCollegeScore(college: CoreCollege, prefs: any): number {
+  private calculateCollegeScore(college: College, prefs: any): number {
     let score = 50; // 基础分
 
     // 985/211/双一流加分
@@ -442,7 +442,7 @@ export class NewRecommendationEngine {
   /**
    * 计算城市得分
    */
-  private calculateCityScore(college: CoreCollege, prefs: any): number {
+  private calculateCityScore(college: College, prefs: any): number {
     let score = 50;
 
     if (prefs.targetCities) {
@@ -521,7 +521,7 @@ export class NewRecommendationEngine {
   /**
    * 生成推荐理由
    */
-  private generateReasons(candidate: CandidateVolunteer, college: CoreCollege, prefs: any): void {
+  private generateReasons(candidate: CandidateVolunteer, college: College, prefs: any): void {
     const reasons: string[] = [];
     const warnings: string[] = [];
 

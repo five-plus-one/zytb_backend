@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/database';
-import { CoreCollege } from '../models/core/CoreCollege';
-import { CoreMajor } from '../models/core/CoreMajor';
+import { College } from '../models/College';
+import { Major } from '../models/Major';
 import { EnrollmentPlanGroup } from '../models/EnrollmentPlanGroup';
 
 /**
@@ -25,13 +25,13 @@ export interface EntityLink {
 }
 
 export class EntityExtractionService {
-  private collegeRepo = AppDataSource.getRepository(CoreCollege);
-  private majorRepo = AppDataSource.getRepository(CoreMajor);
+  private collegeRepo = AppDataSource.getRepository(College);
+  private majorRepo = AppDataSource.getRepository(Major);
   private groupRepo = AppDataSource.getRepository(EnrollmentPlanGroup);
 
   // 缓存常用数据
-  private collegeCache: Map<string, CoreCollege> = new Map();
-  private majorCache: Map<string, CoreMajor> = new Map();
+  private collegeCache: Map<string, College> = new Map();
+  private majorCache: Map<string, Major> = new Map();
   private provincesAndCities: Set<string> = new Set([
     '北京', '上海', '天津', '重庆',
     '广东', '广州', '深圳', '珠海', '汕头', '佛山', '韶关', '湛江', '肇庆', '江门', '茂名', '惠州', '梅州', '汕尾', '河源', '阳江', '清远', '东莞', '中山', '潮州', '揭阳', '云浮',

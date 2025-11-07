@@ -1,7 +1,7 @@
 import { AppDataSource } from '../config/database';
-import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
-import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
-import { CoreCollege } from '../models/core/CoreCollege';
+import { EnrollmentPlan } from '../models/EnrollmentPlan';
+import { AdmissionScore } from '../models/AdmissionScore';
+import { College } from '../models/College';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 
 export interface EnrollmentPlanDetailQueryDto {
@@ -64,9 +64,9 @@ export interface EnrollmentPlanDetailResult {
 }
 
 export class EnrollmentPlanDetailService {
-  private enrollmentPlanRepository = AppDataSource.getRepository(CoreEnrollmentPlan);
-  private admissionScoreRepository = AppDataSource.getRepository(CoreAdmissionScore);
-  private collegeRepository = AppDataSource.getRepository(CoreCollege);
+  private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
+  private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
+  private collegeRepository = AppDataSource.getRepository(College);
 
   /**
    * 查询招生计划详情
@@ -133,7 +133,7 @@ export class EnrollmentPlanDetailService {
           subjectType: plan.subjectType,
           batch: plan.batch,
           collegeCode: plan.collegeCode,
-          collegeName: plan.collegeName || "",
+          collegeName: plan.collegeName,
           majorGroupCode: plan.majorGroupCode || null,
           majorGroupName: plan.majorGroupName || null,
           subjectRequirements: plan.subjectRequirements || null,
@@ -150,10 +150,10 @@ export class EnrollmentPlanDetailService {
           detail.collegeInfo = {
             level: plan.college.educationLevel || null,
             category: plan.college.type || null,
-            province: plan.collegeProvince || null,
-            city: plan.collegeCity || null,
-            isKey985: plan.collegeIs985 || false,
-            isKey211: plan.collegeIs211 || false,
+            province: plan.college.province || null,
+            city: plan.college.city || null,
+            isKey985: plan.college.is985 || false,
+            isKey211: plan.college.is211 || false,
             isDoubleFirstClass: plan.college.isDoubleFirstClass || false
           };
         }
@@ -234,7 +234,7 @@ export class EnrollmentPlanDetailService {
       if (!acc[key]) {
         acc[key] = {
           collegeCode: plan.collegeCode,
-          collegeName: plan.collegeName || "",
+          collegeName: plan.collegeName,
           totalPlanCount: 0,
           majorGroups: {} as any
         };

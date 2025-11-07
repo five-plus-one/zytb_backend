@@ -1,14 +1,14 @@
 import { AppDataSource } from '../config/database';
-import { CoreMajor } from '../models/core/CoreMajor';
-import { CoreCollege } from '../models/core/CoreCollege';
+import { Major } from '../models/Major';
+import { College } from '../models/College';
 import { MajorQueryDto } from '../types';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Like } from 'typeorm';
 import { EmbeddingService } from './embedding.service';
 
 export class MajorService {
-  private majorRepository = AppDataSource.getRepository(CoreMajor);
-  private collegeRepository = AppDataSource.getRepository(CoreCollege);
+  private majorRepository = AppDataSource.getRepository(Major);
+  private collegeRepository = AppDataSource.getRepository(College);
   private embeddingService = new EmbeddingService();
 
   // 获取专业列表
@@ -85,7 +85,7 @@ export class MajorService {
     }
 
     const { pageNum, pageSize } = validatePageParams(query.pageNum, query.pageSize);
-    const advantageColleges = (major.advantageColleges || []).filter((c): c is string => typeof c === "string");
+    const advantageColleges = major.advantageColleges || [];
 
     const start = (pageNum - 1) * pageSize;
     const end = start + pageSize;

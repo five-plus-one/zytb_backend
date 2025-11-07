@@ -1,8 +1,8 @@
 import { AppDataSource } from '../../config/database';
-import { CoreCollege } from '../../models/core/CoreCollege';
-import { CoreMajor } from '../../models/core/CoreMajor';
-import { CoreEnrollmentPlan } from '../../models/core/CoreEnrollmentPlan';
-import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
+import { College } from '../../models/College';
+import { Major } from '../../models/Major';
+import { EnrollmentPlan } from '../../models/EnrollmentPlan';
+import { AdmissionScore } from '../../models/AdmissionScore';
 import { AgentPreference } from '../../models/AgentPreference';
 import { In, Not, IsNull } from 'typeorm';
 
@@ -164,9 +164,9 @@ export class RecommendationEngine {
     userPrefs: UserPreferences,
     minScoreOffset: number,
     maxScoreOffset: number
-  ): Promise<CoreCollege[]> {
-    const collegeRepo = AppDataSource.getRepository(CoreCollege);
-    const admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
+  ): Promise<College[]> {
+    const collegeRepo = AppDataSource.getRepository(College);
+    const admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
 
     // 1. 根据历史分数线初步筛选院校
     const historicalScores = await admissionScoreRepo
@@ -226,9 +226,9 @@ export class RecommendationEngine {
   /**
    * 步骤1: 筛选候选院校 (旧方法,保留用于兼容)
    */
-  private async filterCandidateColleges(userPrefs: UserPreferences): Promise<CoreCollege[]> {
-    const collegeRepo = AppDataSource.getRepository(CoreCollege);
-    const admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
+  private async filterCandidateColleges(userPrefs: UserPreferences): Promise<College[]> {
+    const collegeRepo = AppDataSource.getRepository(College);
+    const admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
 
     // 1. 根据历史分数线初步筛选院校
     const historicalScores = await admissionScoreRepo
@@ -290,10 +290,10 @@ export class RecommendationEngine {
    * 步骤2: 为院校匹配专业
    */
   private async matchMajorsForCollege(
-    college: CoreCollege,
+    college: College,
     userPrefs: UserPreferences
   ): Promise<Partial<CandidateVolunteer>[]> {
-    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
     const prefs = this.parsePreferences(userPrefs.preferences);
 
     // 查询该院校在用户省份的招生计划
@@ -336,8 +336,8 @@ export class RecommendationEngine {
   /**
    * 按专业组分组
    */
-  private groupByMajorGroup(plans: CoreEnrollmentPlan[]): Record<string, CoreEnrollmentPlan[]> {
-    const groups: Record<string, CoreEnrollmentPlan[]> = {};
+  private groupByMajorGroup(plans: EnrollmentPlan[]): Record<string, EnrollmentPlan[]> {
+    const groups: Record<string, EnrollmentPlan[]> = {};
 
     for (const plan of plans) {
       const key = plan.majorGroupCode || plan.majorCode || 'default';
@@ -366,7 +366,7 @@ export class RecommendationEngine {
     const prefs = this.parsePreferences(userPrefs.preferences);
 
     // 获取院校和专业详细信息
-    const college = await AppDataSource.getRepository(CoreCollege)
+    const college = await AppDataSource.getRepository(College)
       .findOne({ where: { name: volunteer.collegeName } });
 
     if (!college) return;
@@ -435,7 +435,7 @@ export class RecommendationEngine {
    * 计算院校维度得分
    */
   private calculateCollegeScore(
-    college: CoreCollege,
+    college: College,
     prefs: any,
     weights: any
   ): number {
@@ -483,7 +483,7 @@ export class RecommendationEngine {
     prefs: any,
     weights: any
   ): Promise<number> {
-    const majorRepo = AppDataSource.getRepository(CoreMajor);
+    const majorRepo = AppDataSource.getRepository(Major);
     let score = 0;
     const maxScore = 100;
 
@@ -524,7 +524,7 @@ export class RecommendationEngine {
    * 计算城市维度得分
    */
   private calculateCityScore(
-    college: CoreCollege,
+    college: College,
     prefs: any,
     weights: any
   ): number {
@@ -560,7 +560,7 @@ export class RecommendationEngine {
    * 计算就业深造维度得分
    */
   private calculateCareerScore(
-    college: CoreCollege,
+    college: College,
     prefs: any,
     weights: any
   ): number {
@@ -588,7 +588,7 @@ export class RecommendationEngine {
     majorGroupCode: string | undefined,
     userPrefs: UserPreferences
   ): Promise<any> {
-    const admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
+    const admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
 
     // 查询近3年的录取分数线
     let query = admissionScoreRepo
@@ -689,7 +689,7 @@ export class RecommendationEngine {
       };
     }
 
-    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
 
     // 查询该专业组内的所有专业
     const majorsInGroup = await enrollmentPlanRepo.find({
@@ -810,7 +810,7 @@ export class RecommendationEngine {
    */
   private generateMatchingReasons(
     volunteer: Partial<CandidateVolunteer>,
-    college: CoreCollege,
+    college: College,
     prefs: any
   ): void {
     const reasons: string[] = [];
@@ -863,8 +863,8 @@ export class RecommendationEngine {
   ): Promise<CandidateVolunteer[]> {
     console.log(`  🆘 执行保底策略,需要补充 ${neededCount} 个志愿`);
 
-    const collegeRepo = AppDataSource.getRepository(CoreCollege);
-    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+    const collegeRepo = AppDataSource.getRepository(College);
+    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
 
     // 策略1: 获取该省份招生的所有院校 (不限分数)
     const allColleges = await collegeRepo

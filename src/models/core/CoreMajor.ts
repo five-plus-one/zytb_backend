@@ -65,11 +65,39 @@ export class CoreMajor {
   @Index()
   hotLevel!: number;
 
+  // 兼容旧字段：isHot基于hotLevel计算
+  get isHot(): boolean {
+    return this.hotLevel >= 60;
+  }
+
   @Column({ type: 'int', default: 0, name: 'college_count', comment: '开设院校数' })
   collegeCount!: number;
 
   @Column({ type: 'int', nullable: true, name: 'avg_admission_score', comment: '平均录取分' })
   avgAdmissionScore?: number;
+
+  // 向量搜索字段
+  @Column({ type: 'json', nullable: true, name: 'embedding_vector', comment: '向量嵌入' })
+  embeddingVector?: number[];
+
+  // 详细信息字段（兼容旧模型）
+  @Column({ type: 'json', nullable: true, comment: '课程列表' })
+  courses?: string[];
+
+  @Column({ type: 'json', nullable: true, comment: '职业前景' })
+  career?: string[];
+
+  @Column({ type: 'json', nullable: true, comment: '技能要求' })
+  skills?: string[];
+
+  @Column({ type: 'varchar', length: 50, nullable: true, comment: '学位类型' })
+  degree?: string;
+
+  @Column({ type: 'int', nullable: true, comment: '学制年数' })
+  years?: number;
+
+  @Column({ type: 'json', nullable: true, name: 'advantage_colleges', comment: '优势院校列表' })
+  advantageColleges?: string[];
 
   // 元数据
   @Column({ type: 'int', default: 1, name: 'data_version' })

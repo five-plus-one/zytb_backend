@@ -1,9 +1,9 @@
 import { AppDataSource } from '../../config/database';
 import { AgentPreference } from '../../models/AgentPreference';
-import { CoreMajor } from '../../models/core/CoreMajor';
-import { CoreCollege } from '../../models/core/CoreCollege';
-import { CoreEnrollmentPlan } from '../../models/core/CoreEnrollmentPlan';
-import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
+import { Major } from '../../models/Major';
+import { College } from '../../models/College';
+import { EnrollmentPlan } from '../../models/EnrollmentPlan';
+import { AdmissionScore } from '../../models/AdmissionScore';
 import { EmbeddingService } from '../embedding.service';
 import preferenceEmbeddingService from './preference-embedding.service';
 import cacheService from '../cache.service';
@@ -64,8 +64,8 @@ interface EnhancedRecommendation {
 export class EmbeddingEnhancedRecommendationService {
   private embeddingService: EmbeddingService;
   private traditionalEngine: RecommendationEngine;
-  private majorRepository = AppDataSource.getRepository(CoreMajor);
-  private collegeRepository = AppDataSource.getRepository(CoreCollege);
+  private majorRepository = AppDataSource.getRepository(Major);
+  private collegeRepository = AppDataSource.getRepository(College);
 
   constructor() {
     this.embeddingService = new EmbeddingService();
@@ -271,7 +271,7 @@ export class EmbeddingEnhancedRecommendationService {
     ];
 
     // 查询最新可用年份（可能数据库中只有2024年数据）
-    const latestYearResult = await AppDataSource.getRepository(CoreEnrollmentPlan)
+    const latestYearResult = await AppDataSource.getRepository(EnrollmentPlan)
       .createQueryBuilder('ep')
       .select('MAX(ep.year)', 'maxYear')
       .where('ep.sourceProvince IN (:...provinces)', { provinces })
@@ -285,7 +285,7 @@ export class EmbeddingEnhancedRecommendationService {
     }
 
     // 查询招生计划（兼容多种格式）
-    const enrollmentPlans = await AppDataSource.getRepository(CoreEnrollmentPlan)
+    const enrollmentPlans = await AppDataSource.getRepository(EnrollmentPlan)
       .createQueryBuilder('ep')
       .leftJoinAndSelect('ep.college', 'college')  // 改用LEFT JOIN，即使college_id为NULL也能返回
       .where('ep.sourceProvince IN (:...provinces)', { provinces })
@@ -304,10 +304,10 @@ export class EmbeddingEnhancedRecommendationService {
       console.error(`   4. 查询条件: 年份 = ${targetYear}`);
       console.error(`   提示: 请执行 SELECT DISTINCT source_province, subject_type, year FROM enrollment_plans LIMIT 10;`);
     } else {
-      // Core Layer uses redundant design, no college relation
-      const withoutCollegeName = enrollmentPlans.filter(p => !p.collegeName).length;
-      if (withoutCollegeName > 0) {
-        console.warn(`⚠️  有 ${withoutCollegeName} 条记录的collegeName为空`);
+      // 检查college关联情况
+      const withoutCollege = enrollmentPlans.filter(p => !p.college).length;
+      if (withoutCollege > 0) {
+        console.warn(`⚠️  有 ${withoutCollege} 条记录的college_id未关联，将使用college_name`);
       }
     }
 
@@ -315,8 +315,8 @@ export class EmbeddingEnhancedRecommendationService {
     const candidates = [];
 
     for (const plan of enrollmentPlans) {
-      // Core Layer uses redundant design - collegeName is directly in the plan
-      const collegeName = plan.collegeName;
+      // 使用college?.name或collegeName
+      const collegeName = plan.college?.name || plan.collegeName;
 
       // 查询历史录取分数（使用模糊匹配）
       const admissionScores = await this.findHistoricalScores(
@@ -479,7 +479,7 @@ export class EmbeddingEnhancedRecommendationService {
     }
 
     // 获取专业信息（支持多种匹配方式）
-    let major: CoreMajor | null = null;
+    let major: Major | null = null;
     let majorEmbedding: number[] | null = null;
 
     // 策略1: 如果有专业代码，通过代码精确匹配
@@ -523,7 +523,7 @@ export class EmbeddingEnhancedRecommendationService {
 
       if (majorsInGroup.length > 0) {
         // 如果有用户嵌入向量，计算每个专业的匹配度
-        let bestMatch: { major: CoreMajor; score: number } | null = null;
+        let bestMatch: { major: Major; score: number } | null = null;
 
         for (const m of majorsInGroup) {
           if (!m.embeddingVector || m.embeddingVector.length === 0) {
@@ -869,7 +869,7 @@ export class EmbeddingEnhancedRecommendationService {
   /**
    * 计算就业得分
    */
-  private calculateEmploymentScore(major: CoreMajor | null, preferences: AgentPreference[]): number {
+  private calculateEmploymentScore(major: Major | null, preferences: AgentPreference[]): number {
     if (!major) {
       // 没有major对象时，返回中等分数
       return 60;
@@ -923,7 +923,7 @@ export class EmbeddingEnhancedRecommendationService {
       let industryMatchScore = 0;
 
       if (targetIndustries.length > 0) {
-        const matchedCount = major.careerFields.filter((field: any) =>
+        const matchedCount = major.careerFields.filter(field =>
           targetIndustries.some((industry: string) =>
             field.includes(industry) || industry.includes(field)
           )
@@ -1002,7 +1002,7 @@ export class EmbeddingEnhancedRecommendationService {
    * 返回 0-100 的匹配度分数
    */
   private calculateMajorScore(
-    major: CoreMajor | null,
+    major: Major | null,
     majorName?: string,
     majorGroupName?: string,
     preferences?: AgentPreference[]
@@ -1194,7 +1194,7 @@ export class EmbeddingEnhancedRecommendationService {
   /**
    * 计算性格匹配度
    */
-  private calculatePersonalityFit(major: CoreMajor, preferences: AgentPreference[]): number {
+  private calculatePersonalityFit(major: Major, preferences: AgentPreference[]): number {
     let score = 70; // 基础分
 
     // 获取MBTI
@@ -1276,7 +1276,7 @@ export class EmbeddingEnhancedRecommendationService {
   /**
    * 计算职业目标匹配度
    */
-  private calculateCareerAlignment(major: CoreMajor, preferences: AgentPreference[]): number {
+  private calculateCareerAlignment(major: Major, preferences: AgentPreference[]): number {
     let score = 0;
     let totalWeight = 0;
 
@@ -1307,7 +1307,7 @@ export class EmbeddingEnhancedRecommendationService {
     if (major.careerFields && targetIndustries.length > 0) {
       let matchCount = 0;
       for (const industry of targetIndustries) {
-        if (major.careerFields.some((field: any) => field.includes(industry) || industry.includes(field))) {
+        if (major.careerFields.some(field => field.includes(industry) || industry.includes(field))) {
           matchCount++;
         }
       }
@@ -1407,7 +1407,7 @@ export class EmbeddingEnhancedRecommendationService {
    */
   private generateMatchingReasons(
     college: any,
-    major: CoreMajor | null,
+    major: Major | null,
     scores: Record<string, number>,
     weights: Record<string, number>
   ): string[] {
@@ -1657,8 +1657,8 @@ export class EmbeddingEnhancedRecommendationService {
     majorGroupCode?: string,
     sourceProvince?: string,
     subjectType?: string
-  ): Promise<CoreAdmissionScore[]> {
-    const admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
+  ): Promise<AdmissionScore[]> {
+    const admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
 
     console.log(`\n🔍 [历年分数查询] 开始查询:`);
     console.log(`  - 院校: ${collegeName}`);
@@ -1667,7 +1667,7 @@ export class EmbeddingEnhancedRecommendationService {
     console.log(`  - 生源地: ${sourceProvince}`);
     console.log(`  - 科类: ${subjectType}`);
 
-    let scores: CoreAdmissionScore[] = [];
+    let scores: AdmissionScore[] = [];
 
     // 策略1: 精确匹配（院校名称 + 专业组代码）
     if (majorGroupCode && sourceProvince && subjectType) {
