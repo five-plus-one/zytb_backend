@@ -3,7 +3,7 @@ import { CoreMajor } from '../models/core/CoreMajor';
 import { CoreCollege } from '../models/core/CoreCollege';
 import { MajorQueryDto } from '../types';
 import { validatePageParams, calculatePagination } from '../utils/validator';
-import { Like } from 'typeorm';
+import { Like, MoreThanOrEqual } from 'typeorm';
 import { EmbeddingService } from './embedding.service';
 
 export class MajorService {
@@ -34,8 +34,9 @@ export class MajorService {
       where.degree = query.degree;
     }
 
-    if (query.hot !== undefined) {
-      where.isHot = query.hot;
+    // isHot 是基于 hotLevel 的 getter (hotLevel >= 60 为热门)
+    if (query.hot !== undefined && query.hot === true) {
+      where.hotLevel = MoreThanOrEqual(60);
     }
 
     // 排序
