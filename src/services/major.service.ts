@@ -115,9 +115,8 @@ export class MajorService {
     // 生成嵌入向量
     const embeddingVector = await this.embeddingService.generateEmbedding(embeddingText);
 
-    // 保存
+    // 保存 (CoreMajor only has embeddingVector, not embeddingText)
     await this.majorRepository.update(majorId, {
-      embeddingText,
       embeddingVector
     });
   }
@@ -255,7 +254,10 @@ export class MajorService {
       throw new Error('未找到任何有效的院校');
     }
 
-    major.advantageColleges = [...(major.advantageColleges || []), ...colleges];
+    // Extract college names for advantageColleges (which is string[])
+    const collegeNames = colleges.map(c => c.name);
+    const existingColleges = (major.advantageColleges || []).filter((c): c is string => typeof c === 'string');
+    major.advantageColleges = [...existingColleges, ...collegeNames];
     await this.majorRepository.save(major);
   }
 }

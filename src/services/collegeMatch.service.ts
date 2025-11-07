@@ -215,7 +215,7 @@ export class CollegeMatchService {
     const collegeMap = new Map<string, CollegeMatchResult>();
 
     for (const plan of allPlans) {
-      const key = plan.collegeCode;
+      const key = plan.collegeCode || "";
 
       if (!collegeMap.has(key)) {
         const historicalScores = collegeScoreMap.get(plan.collegeName) || [];
@@ -241,7 +241,7 @@ export class CollegeMatchService {
         }
 
         collegeMap.set(key, {
-          collegeCode: plan.collegeCode,
+          collegeCode: plan.collegeCode || "",
           collegeName: plan.collegeName,
           collegeProvince: plan.collegeProvince || null,
           collegeCity: plan.collegeCity || null,

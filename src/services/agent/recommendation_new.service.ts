@@ -249,8 +249,8 @@ export class NewRecommendationEngine {
       const college = await collegeRepo.findOne({ where: { name: collegeName } });
       if (!college) continue;
 
-      // 提取该专业组内所有专业
-      const majorsInGroup = plans.map(p => p.majorName);
+      // 提取该专业组内所有专业 (filter out undefined values)
+      const majorsInGroup = plans.map(p => p.majorName).filter((name): name is string => !!name);
 
       candidates.push({
         collegeId: college.id,
@@ -326,7 +326,7 @@ export class NewRecommendationEngine {
         collegeName: college.name,
         majorGroupCode: plan.majorGroupCode,
         majorGroupName: plan.majorGroupName,
-        majorsInGroup: groupPlans.map(p => p.majorName),
+        majorsInGroup: groupPlans.map(p => p.majorName).filter((name): name is string => !!name),
         totalScore: 0,
         dimensionScores: {
           collegeScore: 0,

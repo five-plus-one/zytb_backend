@@ -132,31 +132,29 @@ export class EnrollmentPlanDetailService {
           sourceProvince: plan.sourceProvince,
           subjectType: plan.subjectType,
           batch: plan.batch,
-          collegeCode: plan.collegeCode,
+          collegeCode: plan.collegeCode || "",
           collegeName: plan.collegeName || "",
           majorGroupCode: plan.majorGroupCode || null,
           majorGroupName: plan.majorGroupName || null,
           subjectRequirements: plan.subjectRequirements || null,
-          majorCode: plan.majorCode,
-          majorName: plan.majorName,
+          majorCode: plan.majorCode || "",
+          majorName: plan.majorName || "",
           majorRemarks: plan.majorRemarks || null,
           planCount: plan.planCount,
           studyYears: plan.studyYears || null,
           tuition: plan.tuition || null
         };
 
-        // 添加院校详细信息
-        if (plan.college) {
-          detail.collegeInfo = {
-            level: plan.college.educationLevel || null,
-            category: plan.college.type || null,
-            province: plan.collegeProvince || null,
-            city: plan.collegeCity || null,
-            isKey985: plan.collegeIs985 || false,
-            isKey211: plan.collegeIs211 || false,
-            isDoubleFirstClass: plan.college.isDoubleFirstClass || false
-          };
-        }
+        // 添加院校详细信息 (Core Layer uses redundant design, no college relation)
+        detail.collegeInfo = {
+          level: null, // Not available in CoreEnrollmentPlan
+          category: null, // Not available in CoreEnrollmentPlan
+          province: plan.collegeProvince || null,
+          city: plan.collegeCity || null,
+          isKey985: plan.collegeIs985 || false,
+          isKey211: plan.collegeIs211 || false,
+          isDoubleFirstClass: plan.collegeIsWorldClass || false
+        };
 
         // 查询历史录取数据
         if (includeHistoricalScores) {

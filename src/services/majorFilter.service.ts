@@ -233,7 +233,7 @@ export class MajorFilterService {
           majorGroupCode: plan.majorGroupCode || null,
           majorGroupName: plan.majorGroupName || null,
           majorCode: plan.majorCode || "",
-          majorName: plan.majorName,
+          majorName: plan.majorName || "",
           planCount: plan.planCount,
           studyYears: plan.studyYears || null,
           tuition: plan.tuition || null,

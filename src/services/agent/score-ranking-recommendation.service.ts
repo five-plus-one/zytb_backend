@@ -247,10 +247,10 @@ export class ScoreRankingRecommendationService {
       const majorGroupCode = firstPlan.majorGroupCode || firstPlan.majorGroupCode;
       const majorGroupName = firstPlan.majorGroupName;
 
-      // 构建专业列表(最多6个) - 使用当前分组的plans
+      // 构建专业列表(最多6个) - 使用当前分组的plans (filter out undefined values)
       const majors = plans.slice(0, 6).map(plan => ({
-        majorCode: plan.majorCode,
-        majorName: plan.majorName,
+        majorCode: plan.majorCode || "",
+        majorName: plan.majorName || "",
         planCount: plan.planCount,
         tuitionFee: plan.tuition,
         studyYears: plan.studyYears,
@@ -331,10 +331,10 @@ export class ScoreRankingRecommendationService {
       }
 
       candidates.push({
-        collegeCode: collegeCode,
-        collegeId: collegeCode,
+        collegeCode: collegeCode || "",
+        collegeId: collegeCode || "",
         collegeName: collegeName,
-        majorGroupCode: majorGroupCode,
+        majorGroupCode: majorGroupCode || "",
         majorGroupName: majorGroupName || '未命名专业组',
         enrollmentPlanCount: totalPlanCount,
         majors: majors, // 专业列表来自招生计划
