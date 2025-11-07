@@ -108,8 +108,9 @@ export class AgentController {
       let fullResponse = '';
       let responseMetadata: any = null;
       let extractedData: any = null;
+      let contentBlocks: any[] | null = null;
 
-      for await (const chunk of aiAgentService.chatStream(message, conversationHistory, userId)) {
+      for await (const chunk of aiAgentService.chatStream(message, conversationHistory, userId, sessionId)) {
         if (typeof chunk === 'string') {
           // 文本块
           fullResponse += chunk;
@@ -118,6 +119,15 @@ export class AgentController {
           // AgentResponse对象 (最终响应)
           responseMetadata = chunk.metadata;
           extractedData = chunk.metadata?.extractedData;
+
+          // 如果有推荐卡片数据，转换为contentBlocks格式
+          if (extractedData) {
+            contentBlocks = [{
+              type: 'recommendation_cards',
+              data: extractedData
+            }];
+          }
+
           if (chunk.message && !fullResponse) {
             fullResponse = chunk.message;
           }
@@ -125,7 +135,7 @@ export class AgentController {
         }
       }
 
-      // 3. 保存助手响应到旧系统，包括metadata和extractedData（推荐卡片数据）
+      // 3. 保存助手响应到旧系统，包括metadata、extractedData和contentBlocks
       if (fullResponse) {
         await conversationService.addMessage(
           sessionId,
@@ -133,7 +143,8 @@ export class AgentController {
           fullResponse,
           'chat',
           extractedData,  // 包含推荐卡片等提取的数据
-          responseMetadata // 包含工具调用等元数据
+          responseMetadata, // 包含工具调用等元数据
+          contentBlocks    // 结构化内容块
         );
       }
 

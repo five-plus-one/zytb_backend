@@ -43,7 +43,7 @@ export class AgentMessage {
   })
   role!: string;
 
-  @Column({ type: 'text', comment: '消息内容（纯文本，用于兼容和搜索）' })
+  @Column({ type: 'longtext', comment: '消息内容（纯文本，用于兼容和搜索）' })
   content!: string;
 
   // ========== 结构化内容块（新增）==========

@@ -7,7 +7,6 @@ import { AdmissionScore } from '../models/AdmissionScore';
 import { ResponseUtil } from '../utils/response';
 import { AuthRequest } from '../types';
 import { volunteerPositionService } from '../services/volunteerPosition.service';
-import { AdmissionProbabilityService } from '../services/admissionProbability.service';
 
 export class VolunteerCurrentController {
   private tableRepo = AppDataSource.getRepository(VolunteerTable);
@@ -16,7 +15,6 @@ export class VolunteerCurrentController {
   private majorRepo = AppDataSource.getRepository(VolunteerMajor);
   private planRepo = AppDataSource.getRepository(EnrollmentPlan);
   private scoreRepo = AppDataSource.getRepository(AdmissionScore);
-  private probabilityService = new AdmissionProbabilityService();
 
   /**
    * 获取当前志愿表的当前批次（辅助方法）
@@ -68,6 +66,8 @@ export class VolunteerCurrentController {
 
       const { table, batch } = result;
 
+      console.log(`[VolunteerCurrent] 批次信息: score=${batch.score}, rank=${batch.rank}, province=${batch.province}, status=${batch.status}`);
+
       // 查询所有专业组和专业
       const groups = await this.groupRepo.find({
         where: { batchId: batch.id },
@@ -78,69 +78,53 @@ export class VolunteerCurrentController {
       // 丰富每个专业组的数据
       const groupsWithDetails = await Promise.all(
         groups.map(async (group) => {
-          // 查询最近3年的录取分数（用于计算冲稳保）
-          const historicalScores = await this.scoreRepo.find({
-            where: {
-              collegeCode: group.collegeCode,
-              groupCode: group.groupCode
-            },
-            order: { year: 'DESC' },
-            take: 3
-          });
-
-          // 使用统一的概率计算服务计算冲稳保
+          // 读取存储在数据库中的冲稳保分类（在添加时已经计算并存储）
           let category: 'rush' | 'stable' | 'safe' = 'stable';
-          let probability: number | null = null;
 
-          // 确保有历史数据、分数和位次才计算
-          if (historicalScores.length > 0 && batch.score && batch.score > 0 && batch.rank && batch.rank > 0) {
-            const groupHistory = historicalScores.map(score => ({
-              year: score.year,
-              minScore: score.minScore || 0,
-              avgScore: score.avgScore,
-              maxScore: score.maxScore,
-              minRank: score.minRank || 0,
-              maxRank: score.maxRank,
-              planCount: score.planCount || 0
-            }));
+          // 处理各种可能的值：'冲', '稳', '保', '未知', null, undefined, "null"
+          const probability = group.admitProbability;
 
-            const result = this.probabilityService.calculateForGroup(
-              batch.score,
-              batch.rank,
-              groupHistory
-            );
-
-            probability = result.probability;
-
-            // 使用统一的冲稳保标准
-            if (result.riskLevel === '冲') {
-              category = 'rush';
-            } else if (result.riskLevel === '保') {
-              category = 'safe';
-            } else {
-              category = 'stable';
-            }
-          } else {
-            // 如果没有位次但有分数，使用简化算法
-            if (historicalScores.length > 0 && batch.score && batch.score > 0) {
-              const avgMinScore = historicalScores.reduce((sum, s) => sum + (s.minScore || 0), 0) / historicalScores.length;
-              const scoreGap = batch.score - avgMinScore;
-
-              console.log(`[简化算法] ${group.collegeName} ${group.groupCode}: scoreGap=${scoreGap.toFixed(1)}, avgMinScore=${avgMinScore}`);
-
-              // 使用与AdmissionProbabilityService一致的标准
-              if (scoreGap < -10) {
-                category = 'rush';
-              } else if (scoreGap > 15) {
-                category = 'safe';
-              } else {
-                category = 'stable';
-              }
-            }
+          if (probability === '冲') {
+            category = 'rush';
+          } else if (probability === '保') {
+            category = 'safe';
+          } else if (probability === '稳') {
+            category = 'stable';
+          } else if (!probability || probability === 'null' || probability === '未知') {
+            // 如果没有有效的分类，尝试实时计算
+            category = 'stable'; // 默认稳
           }
 
-          // 获取最近一年的分数用于显示
-          const recentScore = historicalScores.length > 0 ? historicalScores[0] : null;
+          console.log(`[VolunteerCurrent - 读取存储值] ${group.collegeName} ${group.groupCode}: admitProbability="${group.admitProbability}", category=${category}`);
+
+          // 查询最近一年的分数用于显示（如果数据库中没有存储）
+          let recentScore: any = null;
+
+          if (group.lastYearMinScore) {
+            recentScore = {
+              year: batch.year - 1,
+              minScore: group.lastYearMinScore,
+              minRank: group.lastYearMinRank
+            };
+          } else {
+            // 如果没有存储，查询一次
+            const historicalScores = await this.scoreRepo.find({
+              where: {
+                collegeCode: group.collegeCode,
+                groupCode: group.groupCode
+              },
+              order: { year: 'DESC' },
+              take: 1
+            });
+
+            if (historicalScores.length > 0) {
+              recentScore = {
+                year: historicalScores[0].year,
+                minScore: historicalScores[0].minScore,
+                minRank: historicalScores[0].minRank
+              };
+            }
+          }
 
           return {
             id: group.id,
@@ -161,7 +145,6 @@ export class VolunteerCurrentController {
               duration: m.duration
             })),
             category,
-            probability,
             recentScore: recentScore ? {
               year: recentScore.year,
               minScore: recentScore.minScore,
