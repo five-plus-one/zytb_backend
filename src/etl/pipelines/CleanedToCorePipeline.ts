@@ -315,7 +315,7 @@ export class CleanedToCorePipeline {
         major_group_code, major_group_name, subject_requirements,
         score_volatility, rank_volatility, difficulty_level, competitiveness,
         data_version, last_synced_at, created_at, updated_at
-      ) VALUES (${Array(38).fill('?').join(',')})
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON DUPLICATE KEY UPDATE
         min_score = VALUES(min_score),
         avg_score = VALUES(avg_score),
@@ -423,7 +423,7 @@ export class CleanedToCorePipeline {
         can_order_takeout, can_bring_computer,
         overall_score, reliability, answer_count,
         data_version, last_synced_at, created_at, updated_at
-      ) VALUES (${Array(46).fill('?').join(',')})
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON DUPLICATE KEY UPDATE
         dorm_score = VALUES(dorm_score),
         canteen_quality_score = VALUES(canteen_quality_score),
@@ -476,6 +476,68 @@ export class CleanedToCorePipeline {
     }
 
     console.log(`✅ 院校同步完成: ${stats.synced}/${stats.total}`);
+    return stats;
+  }
+
+  /**
+   * 全量同步所有录取分数
+   */
+  async fullSyncAdmissionScores(): Promise<SyncStats> {
+    if (!this.connection) throw new Error('Pipeline not initialized');
+
+    console.log('🔄 开始全量同步录取分数...');
+
+    const stats: SyncStats = { total: 0, synced: 0, failed: 0, skipped: 0 };
+
+    const [scores]: any = await this.connection.query('SELECT id FROM cleaned_admission_scores');
+    stats.total = scores.length;
+
+    for (const score of scores) {
+      try {
+        await this.syncAdmissionScore(score.id);
+        stats.synced++;
+
+        if (stats.synced % 1000 === 0) {
+          console.log(`  进度: ${stats.synced}/${stats.total}`);
+        }
+      } catch (error: any) {
+        console.error(`  ❌ 同步失败: ${score.id} - ${error.message}`);
+        stats.failed++;
+      }
+    }
+
+    console.log(`✅ 录取分数同步完成: ${stats.synced}/${stats.total}`);
+    return stats;
+  }
+
+  /**
+   * 全量同步所有校园生活
+   */
+  async fullSyncCampusLife(): Promise<SyncStats> {
+    if (!this.connection) throw new Error('Pipeline not initialized');
+
+    console.log('🔄 开始全量同步校园生活...');
+
+    const stats: SyncStats = { total: 0, synced: 0, failed: 0, skipped: 0 };
+
+    const [campusLives]: any = await this.connection.query('SELECT id FROM cleaned_campus_life');
+    stats.total = campusLives.length;
+
+    for (const cl of campusLives) {
+      try {
+        await this.syncCampusLife(cl.id);
+        stats.synced++;
+
+        if (stats.synced % 100 === 0) {
+          console.log(`  进度: ${stats.synced}/${stats.total}`);
+        }
+      } catch (error: any) {
+        console.error(`  ❌ 同步失败: ${cl.id} - ${error.message}`);
+        stats.failed++;
+      }
+    }
+
+    console.log(`✅ 校园生活同步完成: ${stats.synced}/${stats.total}`);
     return stats;
   }
 
