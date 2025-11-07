@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/database';
-import { AdmissionScore } from '../models/AdmissionScore';
-import { College } from '../models/College';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
+import { CoreCollege } from '../models/core/CoreCollege';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Like, Between } from 'typeorm';
 
@@ -23,8 +23,8 @@ export interface AdmissionScoreQueryDto {
 }
 
 export class AdmissionScoreService {
-  private scoreRepository = AppDataSource.getRepository(AdmissionScore);
-  private collegeRepository = AppDataSource.getRepository(College);
+  private scoreRepository = AppDataSource.getRepository(CoreAdmissionScore);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
 
   // 获取录取分数线列表
   async getAdmissionScoreList(query: AdmissionScoreQueryDto) {

@@ -1,14 +1,14 @@
 import { AppDataSource } from '../config/database';
-import { Major } from '../models/Major';
-import { College } from '../models/College';
+import { CoreMajor } from '../models/core/CoreMajor';
+import { CoreCollege } from '../models/core/CoreCollege';
 import { MajorQueryDto } from '../types';
 import { validatePageParams, calculatePagination } from '../utils/validator';
-import { Like } from 'typeorm';
+import { Like, MoreThanOrEqual } from 'typeorm';
 import { EmbeddingService } from './embedding.service';
 
 export class MajorService {
-  private majorRepository = AppDataSource.getRepository(Major);
-  private collegeRepository = AppDataSource.getRepository(College);
+  private majorRepository = AppDataSource.getRepository(CoreMajor);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
   private embeddingService = new EmbeddingService();
 
   // 获取专业列表
@@ -34,8 +34,9 @@ export class MajorService {
       where.degree = query.degree;
     }
 
-    if (query.hot !== undefined) {
-      where.isHot = query.hot;
+    // isHot 是基于 hotLevel 的 getter (hotLevel >= 60 为热门)
+    if (query.hot !== undefined && query.hot === true) {
+      where.hotLevel = MoreThanOrEqual(60);
     }
 
     // 排序
@@ -85,7 +86,7 @@ export class MajorService {
     }
 
     const { pageNum, pageSize } = validatePageParams(query.pageNum, query.pageSize);
-    const advantageColleges = major.advantageColleges || [];
+    const advantageColleges = (major.advantageColleges || []).filter((c): c is string => typeof c === "string");
 
     const start = (pageNum - 1) * pageSize;
     const end = start + pageSize;
@@ -115,9 +116,8 @@ export class MajorService {
     // 生成嵌入向量
     const embeddingVector = await this.embeddingService.generateEmbedding(embeddingText);
 
-    // 保存
+    // 保存 (CoreMajor only has embeddingVector, not embeddingText)
     await this.majorRepository.update(majorId, {
-      embeddingText,
       embeddingVector
     });
   }
@@ -255,7 +255,10 @@ export class MajorService {
       throw new Error('未找到任何有效的院校');
     }
 
-    major.advantageColleges = [...(major.advantageColleges || []), ...colleges];
+    // Extract college names for advantageColleges (which is string[])
+    const collegeNames = colleges.map(c => c.name);
+    const existingColleges = (major.advantageColleges || []).filter((c): c is string => typeof c === 'string');
+    major.advantageColleges = [...existingColleges, ...collegeNames];
     await this.majorRepository.save(major);
   }
 }

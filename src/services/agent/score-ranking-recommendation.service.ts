@@ -1,8 +1,8 @@
 import { AppDataSource } from '../../config/database';
 import { AgentPreference } from '../../models/AgentPreference';
-import { College } from '../../models/College';
-import { EnrollmentPlan } from '../../models/EnrollmentPlan';
-import { AdmissionScore } from '../../models/AdmissionScore';
+import { CoreCollege } from '../../models/core/CoreCollege';
+import { CoreEnrollmentPlan } from '../../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
 import { ScoreRanking } from '../../models/ScoreRanking';
 
 /**
@@ -63,7 +63,7 @@ interface Candidate {
   riskWarnings: string[];
 
   // 院校详情(后续补充)
-  college?: College;
+  college?: CoreCollege;
 }
 
 interface UserContext {
@@ -198,7 +198,7 @@ export class ScoreRankingRecommendationService {
     const normalizedSubjectType = subjectType.replace('类', '');
 
     // 步骤1: 从EnrollmentPlan查询所有招生计划(最新年份)
-    const planRepo = AppDataSource.getRepository(EnrollmentPlan);
+    const planRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
 
     const enrollmentPlans = await planRepo
       .createQueryBuilder('plan')
@@ -221,11 +221,11 @@ export class ScoreRankingRecommendationService {
     }
 
     // 步骤2: 按院校+专业组分组
-    const groupedPlans = new Map<string, EnrollmentPlan[]>();
+    const groupedPlans = new Map<string, CoreEnrollmentPlan[]>();
 
     for (const plan of enrollmentPlans) {
       // 使用院校代码+专业组代码作为key,确保精确分组
-      const majorGroupKey = plan.majorGroupCode || plan.collegeMajorGroupCode || 'default';
+      const majorGroupKey = plan.majorGroupCode || plan.majorGroupCode || 'default';
       const key = `${plan.collegeCode}-${majorGroupKey}`;
 
       if (!groupedPlans.has(key)) {
@@ -237,20 +237,20 @@ export class ScoreRankingRecommendationService {
     console.log(`📊 分组后共 ${groupedPlans.size} 个院校专业组`);
 
     // 步骤3: 为每个院校专业组模糊匹配历年录取分数
-    const scoreRepo = AppDataSource.getRepository(AdmissionScore);
+    const scoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
     const candidates: Candidate[] = [];
 
     for (const [key, plans] of groupedPlans.entries()) {
       const firstPlan = plans[0];
       const collegeCode = firstPlan.collegeCode;
       const collegeName = firstPlan.collegeName;
-      const majorGroupCode = firstPlan.majorGroupCode || firstPlan.collegeMajorGroupCode;
+      const majorGroupCode = firstPlan.majorGroupCode || firstPlan.majorGroupCode;
       const majorGroupName = firstPlan.majorGroupName;
 
-      // 构建专业列表(最多6个) - 使用当前分组的plans
+      // 构建专业列表(最多6个) - 使用当前分组的plans (filter out undefined values)
       const majors = plans.slice(0, 6).map(plan => ({
-        majorCode: plan.majorCode,
-        majorName: plan.majorName,
+        majorCode: plan.majorCode || "",
+        majorName: plan.majorName || "",
         planCount: plan.planCount,
         tuitionFee: plan.tuition,
         studyYears: plan.studyYears,
@@ -331,10 +331,10 @@ export class ScoreRankingRecommendationService {
       }
 
       candidates.push({
-        collegeCode: collegeCode,
-        collegeId: collegeCode,
+        collegeCode: collegeCode || "",
+        collegeId: collegeCode || "",
         collegeName: collegeName,
-        majorGroupCode: majorGroupCode,
+        majorGroupCode: majorGroupCode || "",
         majorGroupName: majorGroupName || '未命名专业组',
         enrollmentPlanCount: totalPlanCount,
         majors: majors, // 专业列表来自招生计划
@@ -371,7 +371,7 @@ export class ScoreRankingRecommendationService {
   ): Promise<any[]> {
     console.log('🔄 使用降级策略:直接从招生计划查询');
 
-    const repo = AppDataSource.getRepository(EnrollmentPlan);
+    const repo = AppDataSource.getRepository(CoreEnrollmentPlan);
     const currentYear = new Date().getFullYear();
 
     const normalizedSubjectType = context.subjectType.replace('类', '');
@@ -393,8 +393,8 @@ export class ScoreRankingRecommendationService {
         collegeId: plan.collegeId || 'unknown',
         collegeName: plan.collegeName,
         majorName: plan.majorName,
-        majorGroupCode: plan.majorGroupCode,
-        majorGroupName: plan.majorGroupName,
+        majorGroupCode: plan.majorGroupCode || "",
+        majorGroupName: plan.majorGroupName || "",
         totalScore: 50,
         scoreCategory: 'moderate',
         admissionProbability: 'medium',
@@ -473,7 +473,7 @@ export class ScoreRankingRecommendationService {
     collegeName: string,
     preferences: any
   ): Promise<number> {
-    const repo = AppDataSource.getRepository(College);
+    const repo = AppDataSource.getRepository(CoreCollege);
     const college = await repo.findOne({ where: { name: collegeName } });
 
     if (!college) {
@@ -655,7 +655,7 @@ export class ScoreRankingRecommendationService {
     preferences: any,
     userProvince: string
   ): Promise<number> {
-    const repo = AppDataSource.getRepository(College);
+    const repo = AppDataSource.getRepository(CoreCollege);
     const college = await repo.findOne({ where: { name: collegeName } });
 
     if (!college) {
@@ -840,7 +840,7 @@ export class ScoreRankingRecommendationService {
    * 补充院校详细信息
    */
   private async enrichCollegeDetails(candidates: Candidate[]): Promise<void> {
-    const repo = AppDataSource.getRepository(College);
+    const repo = AppDataSource.getRepository(CoreCollege);
 
     for (const candidate of candidates) {
       const college = await repo.findOne({ where: { name: candidate.collegeName } });

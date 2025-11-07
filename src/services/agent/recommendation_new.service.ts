@@ -1,8 +1,8 @@
 import { AppDataSource } from '../../config/database';
-import { College } from '../../models/College';
-import { Major } from '../../models/Major';
-import { EnrollmentPlan } from '../../models/EnrollmentPlan';
-import { AdmissionScore } from '../../models/AdmissionScore';
+import { CoreCollege } from '../../models/core/CoreCollege';
+import { CoreMajor } from '../../models/core/CoreMajor';
+import { CoreEnrollmentPlan } from '../../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
 import { AgentPreference } from '../../models/AgentPreference';
 
 /**
@@ -182,9 +182,9 @@ export class NewRecommendationEngine {
     userPrefs: UserPreferences,
     limit: number
   ): Promise<CandidateVolunteer[]> {
-    const admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
-    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
-    const collegeRepo = AppDataSource.getRepository(College);
+    const admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
+    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+    const collegeRepo = AppDataSource.getRepository(CoreCollege);
 
     // 1. 从admission_scores表拉取近3年的录取数据
     // 分数范围策略:
@@ -249,8 +249,8 @@ export class NewRecommendationEngine {
       const college = await collegeRepo.findOne({ where: { name: collegeName } });
       if (!college) continue;
 
-      // 提取该专业组内所有专业
-      const majorsInGroup = plans.map(p => p.majorName);
+      // 提取该专业组内所有专业 (filter out undefined values)
+      const majorsInGroup = plans.map(p => p.majorName).filter((name): name is string => !!name);
 
       candidates.push({
         collegeId: college.id,
@@ -286,8 +286,8 @@ export class NewRecommendationEngine {
     userPrefs: UserPreferences,
     limit: number
   ): Promise<CandidateVolunteer[]> {
-    const enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
-    const collegeRepo = AppDataSource.getRepository(College);
+    const enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+    const collegeRepo = AppDataSource.getRepository(CoreCollege);
 
     // 注意: enrollment_plans表的subjectType是"物理"/"历史", 而admission_scores是"物理类"/"历史类"
     const normalizedSubjectType = userPrefs.subjectType.replace('类', '');
@@ -326,7 +326,7 @@ export class NewRecommendationEngine {
         collegeName: college.name,
         majorGroupCode: plan.majorGroupCode,
         majorGroupName: plan.majorGroupName,
-        majorsInGroup: groupPlans.map(p => p.majorName),
+        majorsInGroup: groupPlans.map(p => p.majorName).filter((name): name is string => !!name),
         totalScore: 0,
         dimensionScores: {
           collegeScore: 0,
@@ -355,7 +355,7 @@ export class NewRecommendationEngine {
     const weights = userPrefs.decisionWeights;
     const prefs = this.parsePreferences(userPrefs.preferences);
 
-    const collegeRepo = AppDataSource.getRepository(College);
+    const collegeRepo = AppDataSource.getRepository(CoreCollege);
     const college = await collegeRepo.findOne({ where: { name: candidate.collegeName } });
 
     if (!college) {
@@ -402,7 +402,7 @@ export class NewRecommendationEngine {
   /**
    * 计算院校得分
    */
-  private calculateCollegeScore(college: College, prefs: any): number {
+  private calculateCollegeScore(college: CoreCollege, prefs: any): number {
     let score = 50; // 基础分
 
     // 985/211/双一流加分
@@ -442,7 +442,7 @@ export class NewRecommendationEngine {
   /**
    * 计算城市得分
    */
-  private calculateCityScore(college: College, prefs: any): number {
+  private calculateCityScore(college: CoreCollege, prefs: any): number {
     let score = 50;
 
     if (prefs.targetCities) {
@@ -521,7 +521,7 @@ export class NewRecommendationEngine {
   /**
    * 生成推荐理由
    */
-  private generateReasons(candidate: CandidateVolunteer, college: College, prefs: any): void {
+  private generateReasons(candidate: CandidateVolunteer, college: CoreCollege, prefs: any): void {
     const reasons: string[] = [];
     const warnings: string[] = [];
 

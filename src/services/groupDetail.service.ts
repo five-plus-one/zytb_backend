@@ -1,8 +1,8 @@
 import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
-import { College } from '../models/College';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
+import { CoreCollege } from '../models/core/CoreCollege';
 import {
   StructuredGroupRecommendation,
   YearlyAdmissionData,
@@ -16,15 +16,15 @@ import { AdmissionProbabilityService } from './admissionProbability.service';
  * 提供专业组的详细信息查询
  */
 export class GroupDetailService {
-  private enrollmentPlanRepo: Repository<EnrollmentPlan>;
-  private admissionScoreRepo: Repository<AdmissionScore>;
-  private collegeRepo: Repository<College>;
+  private enrollmentPlanRepo: Repository<CoreEnrollmentPlan>;
+  private admissionScoreRepo: Repository<CoreAdmissionScore>;
+  private collegeRepo: Repository<CoreCollege>;
   private probabilityService = new AdmissionProbabilityService();
 
   constructor() {
-    this.enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
-    this.admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
-    this.collegeRepo = AppDataSource.getRepository(College);
+    this.enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+    this.admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
+    this.collegeRepo = AppDataSource.getRepository(CoreCollege);
   }
 
   /**
@@ -275,7 +275,7 @@ export class GroupDetailService {
   /**
    * 生成警告信息
    */
-  private generateWarnings(probResult: any, college: College | null): string[] {
+  private generateWarnings(probResult: any, college: CoreCollege | null): string[] {
     const warnings: string[] = [];
 
     if (probResult.confidence < 60) {
@@ -300,7 +300,7 @@ export class GroupDetailService {
   /**
    * 生成亮点标签
    */
-  private generateHighlights(college: College | null, totalPlanCount: number): string[] {
+  private generateHighlights(college: CoreCollege | null, totalPlanCount: number): string[] {
     const highlights: string[] = [];
 
     if (college?.is985) {

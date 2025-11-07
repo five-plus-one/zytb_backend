@@ -1,7 +1,7 @@
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
-import { College } from '../models/College';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
+import { CoreCollege } from '../models/core/CoreCollege';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 
 export interface EnrollmentPlanDetailQueryDto {
@@ -64,9 +64,9 @@ export interface EnrollmentPlanDetailResult {
 }
 
 export class EnrollmentPlanDetailService {
-  private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
-  private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
-  private collegeRepository = AppDataSource.getRepository(College);
+  private enrollmentPlanRepository = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private admissionScoreRepository = AppDataSource.getRepository(CoreAdmissionScore);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
 
   /**
    * 查询招生计划详情
@@ -132,31 +132,29 @@ export class EnrollmentPlanDetailService {
           sourceProvince: plan.sourceProvince,
           subjectType: plan.subjectType,
           batch: plan.batch,
-          collegeCode: plan.collegeCode,
-          collegeName: plan.collegeName,
+          collegeCode: plan.collegeCode || "",
+          collegeName: plan.collegeName || "",
           majorGroupCode: plan.majorGroupCode || null,
           majorGroupName: plan.majorGroupName || null,
           subjectRequirements: plan.subjectRequirements || null,
-          majorCode: plan.majorCode,
-          majorName: plan.majorName,
+          majorCode: plan.majorCode || "",
+          majorName: plan.majorName || "",
           majorRemarks: plan.majorRemarks || null,
           planCount: plan.planCount,
           studyYears: plan.studyYears || null,
           tuition: plan.tuition || null
         };
 
-        // 添加院校详细信息
-        if (plan.college) {
-          detail.collegeInfo = {
-            level: plan.college.educationLevel || null,
-            category: plan.college.type || null,
-            province: plan.college.province || null,
-            city: plan.college.city || null,
-            isKey985: plan.college.is985 || false,
-            isKey211: plan.college.is211 || false,
-            isDoubleFirstClass: plan.college.isDoubleFirstClass || false
-          };
-        }
+        // 添加院校详细信息 (Core Layer uses redundant design, no college relation)
+        detail.collegeInfo = {
+          level: null, // Not available in CoreEnrollmentPlan
+          category: null, // Not available in CoreEnrollmentPlan
+          province: plan.collegeProvince || null,
+          city: plan.collegeCity || null,
+          isKey985: plan.collegeIs985 || false,
+          isKey211: plan.collegeIs211 || false,
+          isDoubleFirstClass: plan.collegeIsWorldClass || false
+        };
 
         // 查询历史录取数据
         if (includeHistoricalScores) {
@@ -234,7 +232,7 @@ export class EnrollmentPlanDetailService {
       if (!acc[key]) {
         acc[key] = {
           collegeCode: plan.collegeCode,
-          collegeName: plan.collegeName,
+          collegeName: plan.collegeName || "",
           totalPlanCount: 0,
           majorGroups: {} as any
         };

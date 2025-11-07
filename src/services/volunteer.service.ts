@@ -1,7 +1,7 @@
 import { AppDataSource } from '../config/database';
 import { Volunteer } from '../models/Volunteer';
-import { College } from '../models/College';
-import { Major } from '../models/Major';
+import { CoreCollege } from '../models/core/CoreCollege';
+import { CoreMajor } from '../models/core/CoreMajor';
 import { EnrollmentPlanGroup } from '../models/EnrollmentPlanGroup';
 import { RecommendationCardService } from './recommendationCard.service';
 import {
@@ -17,8 +17,8 @@ import { In } from 'typeorm';
 
 export class VolunteerService {
   private volunteerRepository = AppDataSource.getRepository(Volunteer);
-  private collegeRepository = AppDataSource.getRepository(College);
-  private majorRepository = AppDataSource.getRepository(Major);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
+  private majorRepository = AppDataSource.getRepository(CoreMajor);
   private groupRepository = AppDataSource.getRepository(EnrollmentPlanGroup);
   private cardService = new RecommendationCardService();
 

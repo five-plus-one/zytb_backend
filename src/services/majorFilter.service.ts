@@ -1,8 +1,8 @@
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
 import { ScoreRanking } from '../models/ScoreRanking';
-import { College } from '../models/College';
+import { CoreCollege } from '../models/core/CoreCollege';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Brackets } from 'typeorm';
 
@@ -58,10 +58,10 @@ export interface MajorFilterResult {
 }
 
 export class MajorFilterService {
-  private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
-  private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
+  private enrollmentPlanRepository = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private admissionScoreRepository = AppDataSource.getRepository(CoreAdmissionScore);
   private scoreRankingRepository = AppDataSource.getRepository(ScoreRanking);
-  private collegeRepository = AppDataSource.getRepository(College);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
 
   /**
    * 按分数范围和专业方向筛选招生计划
@@ -223,7 +223,7 @@ export class MajorFilterService {
           sourceProvince: plan.sourceProvince,
           subjectType: plan.subjectType,
           batch: plan.batch,
-          collegeCode: plan.collegeCode,
+          collegeCode: plan.collegeCode || "",
           collegeName: plan.collegeName,
           collegeProvince: plan.collegeProvince || null,
           collegeCity: plan.collegeCity || null,
@@ -232,8 +232,8 @@ export class MajorFilterService {
           collegeIsWorldClass: plan.collegeIsWorldClass || false,
           majorGroupCode: plan.majorGroupCode || null,
           majorGroupName: plan.majorGroupName || null,
-          majorCode: plan.majorCode,
-          majorName: plan.majorName,
+          majorCode: plan.majorCode || "",
+          majorName: plan.majorName || "",
           planCount: plan.planCount,
           studyYears: plan.studyYears || null,
           tuition: plan.tuition || null,

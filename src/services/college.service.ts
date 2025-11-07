@@ -1,15 +1,15 @@
 import { AppDataSource } from '../config/database';
-import { College } from '../models/College';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
+import { CoreCollege } from '../models/core/CoreCollege';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
 import { CollegeQueryDto } from '../types';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Like, Between, In } from 'typeorm';
 
 export class CollegeService {
-  private collegeRepository = AppDataSource.getRepository(College);
-  private planRepository = AppDataSource.getRepository(EnrollmentPlan);
-  private scoreRepository = AppDataSource.getRepository(AdmissionScore);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
+  private planRepository = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private scoreRepository = AppDataSource.getRepository(CoreAdmissionScore);
 
   // 获取院校列表
   async getCollegeList(query: CollegeQueryDto) {
@@ -41,7 +41,7 @@ export class CollegeService {
     if (query.minScore !== undefined || query.maxScore !== undefined) {
       const min = query.minScore || 0;
       const max = query.maxScore || 999;
-      queryBuilder.andWhere('college.min_score BETWEEN :min AND :max', { min, max });
+      queryBuilder.andWhere('college.minScore BETWEEN :min AND :max', { min, max });
     }
 
     // 特殊处理：如果按rank排序，确保无排名的院校排在最后
@@ -133,7 +133,7 @@ export class CollegeService {
     }
 
     // 查询历年分数（如果提供了省份和科类）
-    let historicalScores: AdmissionScore[] = [];
+    let historicalScores: CoreAdmissionScore[] = [];
     if (province && subjectType) {
       historicalScores = await this.scoreRepository.find({
         where: {

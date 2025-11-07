@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { College } from '../models/College';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreCollege } from '../models/core/CoreCollege';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 import { Like, In } from 'typeorm';
 
@@ -21,8 +21,8 @@ export interface EnrollmentPlanQueryDto {
 }
 
 export class EnrollmentPlanService {
-  private planRepository = AppDataSource.getRepository(EnrollmentPlan);
-  private collegeRepository = AppDataSource.getRepository(College);
+  private planRepository = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
 
   // 获取招生计划列表
   async getEnrollmentPlanList(query: EnrollmentPlanQueryDto) {

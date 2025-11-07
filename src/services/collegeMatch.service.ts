@@ -1,8 +1,8 @@
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
 import { ScoreRanking } from '../models/ScoreRanking';
-import { College } from '../models/College';
+import { CoreCollege } from '../models/core/CoreCollege';
 import { validatePageParams, calculatePagination } from '../utils/validator';
 
 /**
@@ -124,10 +124,10 @@ export interface CollegeMatchDetail {
  * 院校匹配服务
  */
 export class CollegeMatchService {
-  private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
-  private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
+  private enrollmentPlanRepository = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private admissionScoreRepository = AppDataSource.getRepository(CoreAdmissionScore);
   private scoreRankingRepository = AppDataSource.getRepository(ScoreRanking);
-  private collegeRepository = AppDataSource.getRepository(College);
+  private collegeRepository = AppDataSource.getRepository(CoreCollege);
 
   /**
    * 查询适合的院校(院校级聚合)
@@ -215,7 +215,7 @@ export class CollegeMatchService {
     const collegeMap = new Map<string, CollegeMatchResult>();
 
     for (const plan of allPlans) {
-      const key = plan.collegeCode;
+      const key = plan.collegeCode || "";
 
       if (!collegeMap.has(key)) {
         const historicalScores = collegeScoreMap.get(plan.collegeName) || [];
@@ -241,7 +241,7 @@ export class CollegeMatchService {
         }
 
         collegeMap.set(key, {
-          collegeCode: plan.collegeCode,
+          collegeCode: plan.collegeCode || "",
           collegeName: plan.collegeName,
           collegeProvince: plan.collegeProvince || null,
           collegeCity: plan.collegeCity || null,
@@ -376,7 +376,7 @@ export class CollegeMatchService {
     const userRank = userRanking?.rank || userRanking?.cumulativeCount || null;
 
     // 2. 查询院校信息
-    let college: College | null;
+    let college: CoreCollege | null;
     if (collegeCode) {
       college = await this.collegeRepository.findOne({ where: { code: collegeCode } });
     } else {

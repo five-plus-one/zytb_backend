@@ -16,6 +16,12 @@ import { AgentPreference } from '../models/AgentPreference';
 import { AgentRecommendation } from '../models/AgentRecommendation';
 import { SystemConfig } from '../models/SystemConfig';
 
+// 核心运算层实体
+import { CoreCollege } from '../models/core/CoreCollege';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
+import { CoreMajor } from '../models/core/CoreMajor';
+import { CoreCampusLife } from '../models/core/CoreCampusLife';
+
 export const AppDataSource = new DataSource({
   ...config.database,
   entities: [
@@ -35,7 +41,12 @@ export const AppDataSource = new DataSource({
     AgentMessage,
     AgentPreference,
     AgentRecommendation,
-    SystemConfig
+    SystemConfig,
+    // 核心运算层实体
+    CoreCollege,
+    CoreAdmissionScore,
+    CoreMajor,
+    CoreCampusLife
   ],
   migrations: [__dirname + '/../migrations/**/*.js']
 });

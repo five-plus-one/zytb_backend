@@ -1,7 +1,7 @@
 import { AppDataSource } from '../../config/database';
-import { College } from '../../models/College';
-import { Major } from '../../models/Major';
-import { AdmissionScore } from '../../models/AdmissionScore';
+import { CoreCollege } from '../../models/core/CoreCollege';
+import { CoreMajor } from '../../models/core/CoreMajor';
+import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
 import { ScoreRanking } from '../../models/ScoreRanking';
 import { Volunteer } from '../../models/Volunteer';
 import { Like, Between } from 'typeorm';
@@ -48,9 +48,9 @@ export interface AdmissionScoreQuery {
 }
 
 export class ToolsService {
-  private collegeRepo = AppDataSource.getRepository(College);
-  private majorRepo = AppDataSource.getRepository(Major);
-  private admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
+  private collegeRepo = AppDataSource.getRepository(CoreCollege);
+  private majorRepo = AppDataSource.getRepository(CoreMajor);
+  private admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
   private scoreRankingRepo = AppDataSource.getRepository(ScoreRanking);
   private volunteerRepo = AppDataSource.getRepository(Volunteer);
 
