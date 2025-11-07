@@ -157,8 +157,9 @@ export class QuickSessionController {
       // 使用AI Agent Service处理（带工具调用）
       let fullResponse = '';
       let responseMetadata: any = null;
+      let contentBlocks: any[] | null = null;
 
-      for await (const chunk of aiAgentService.chatStream(message, conversationHistory, userId)) {
+      for await (const chunk of aiAgentService.chatStream(message, conversationHistory, userId, quickSessionId)) {
         if (typeof chunk === 'string') {
           fullResponse += chunk;
           res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
@@ -167,16 +168,24 @@ export class QuickSessionController {
           if (chunk.message && !fullResponse) {
             fullResponse = chunk.message;
           }
+
+          // 提取推荐卡片数据并转换为contentBlocks格式
+          if (responseMetadata?.extractedData) {
+            contentBlocks = [{
+              type: 'recommendation_cards',
+              data: responseMetadata.extractedData
+            }];
+          }
         }
       }
 
-      // 保存助手响应
+      // 保存助手响应（包含contentBlocks）
       if (fullResponse) {
         await quickSessionService.addMessage(
           quickSessionId,
           'assistant',
           fullResponse,
-          undefined,
+          contentBlocks || undefined,
           responseMetadata
         );
       }
