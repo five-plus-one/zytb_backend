@@ -5,6 +5,7 @@ import { EnrollmentPlan } from '../../models/EnrollmentPlan';
 import { AdmissionScore } from '../../models/AdmissionScore';
 import { BatchHelper } from '../utils/batchHelper';
 import { ConversationContextManager } from '../utils/conversationContext.manager';
+import { AdmissionProbabilityService, GroupHistoricalData } from '../../services/admissionProbability.service';
 
 /**
  * 智能添加院校到志愿表工具
@@ -55,6 +56,7 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
   private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
   private batchHelper = new BatchHelper();
   private contextManager = ConversationContextManager.getInstance();
+  private probabilityService = new AdmissionProbabilityService();
 
   async execute(
     params: Record<string, any>,
@@ -194,37 +196,101 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
         };
       }
 
-      // 5. 查询历年录取分数并判断冲稳保
+      // 5. 查询历年录取分数并判断冲稳保（使用统一的AdmissionProbabilityService）
       const collegeName = groupsToAdd[0].collegeName;
-      const historicalScores = await this.admissionScoreRepository
+      const collegeCode = groupsToAdd[0].collegeCode;
+
+      // 查询近3年历史分数（用于概率计算）
+      const historicalScoresData = await this.admissionScoreRepository
         .createQueryBuilder('as')
-        .where('as.collegeName = :collegeName', { collegeName })
+        .where('as.collegeCode = :collegeCode', { collegeCode })
         .andWhere('as.sourceProvince = :sourceProvince', { sourceProvince: batch.province })
         .andWhere('as.subjectType = :subjectType', { subjectType: batch.subjectType })
         .andWhere('as.year < :year', { year: batch.year })
         .orderBy('as.year', 'DESC')
-        .limit(1)
-        .getOne();
+        .limit(3)
+        .getMany();
 
-      let admitProbability = '未知';
-      let lastYearMinScore: number | undefined;
-      let lastYearMinRank: number | undefined;
+      // 为每个专业组计算概率和冲稳保
+      const groupsWithProbability: any[] = [];
 
-      if (historicalScores) {
-        lastYearMinScore = historicalScores.minScore || undefined;
-        lastYearMinRank = historicalScores.minRank || undefined;
+      for (const groupData of groupsToAdd) {
+        // 查询该专业组的历史分数
+        const groupHistoricalScores = await this.admissionScoreRepository
+          .createQueryBuilder('as')
+          .where('as.collegeCode = :collegeCode', { collegeCode })
+          .andWhere('as.groupCode = :groupCode', { groupCode: groupData.groupCode })
+          .andWhere('as.sourceProvince = :sourceProvince', { sourceProvince: batch.province })
+          .andWhere('as.subjectType = :subjectType', { subjectType: batch.subjectType })
+          .andWhere('as.year < :year', { year: batch.year })
+          .orderBy('as.year', 'DESC')
+          .limit(3)
+          .getMany();
 
-        if (historicalScores.minScore) {
-          const scoreGap = batch.score - historicalScores.minScore;
+        let admitProbability = '未知';
+        let probability: number | null = null;
+        let lastYearMinScore: number | undefined;
+        let lastYearMinRank: number | undefined;
+
+        // 如果有历史数据且用户有分数和位次，使用完整的概率计算
+        if (groupHistoricalScores.length > 0 && batch.score > 0 && batch.rank && batch.rank > 0) {
+          const groupHistory: GroupHistoricalData[] = groupHistoricalScores.map(score => ({
+            year: score.year,
+            minScore: score.minScore || 0,
+            avgScore: score.avgScore,
+            maxScore: score.maxScore,
+            minRank: score.minRank || 0,
+            maxRank: score.maxRank,
+            planCount: score.planCount || 0
+          }));
+
+          const result = this.probabilityService.calculateForGroup(
+            batch.score,
+            batch.rank,
+            groupHistory
+          );
+
+          probability = result.probability;
+
+          // 使用统一的冲稳保标准
+          if (result.riskLevel === '冲') {
+            admitProbability = '冲';
+          } else if (result.riskLevel === '保') {
+            admitProbability = '保';
+          } else {
+            admitProbability = '稳';
+          }
+
+          lastYearMinScore = groupHistoricalScores[0].minScore || undefined;
+          lastYearMinRank = groupHistoricalScores[0].minRank || undefined;
+
+          console.log(`[AI Tool - 添加志愿] ${collegeName} ${groupData.groupCode}: probability=${probability}%, riskLevel=${result.riskLevel}, scoreGap=${result.scoreGap}`);
+        } else if (groupHistoricalScores.length > 0 && batch.score > 0) {
+          // 如果没有位次，使用简化算法
+          const avgMinScore = groupHistoricalScores.reduce((sum, s) => sum + (s.minScore || 0), 0) / groupHistoricalScores.length;
+          const scoreGap = batch.score - avgMinScore;
 
           if (scoreGap < -10) {
             admitProbability = '冲';
-          } else if (scoreGap >= -10 && scoreGap <= 10) {
-            admitProbability = '稳';
-          } else {
+          } else if (scoreGap > 15) {
             admitProbability = '保';
+          } else {
+            admitProbability = '稳';
           }
+
+          lastYearMinScore = groupHistoricalScores[0].minScore || undefined;
+          lastYearMinRank = groupHistoricalScores[0].minRank || undefined;
+
+          console.log(`[AI Tool - 添加志愿 - 简化算法] ${collegeName} ${groupData.groupCode}: scoreGap=${scoreGap.toFixed(1)}, category=${admitProbability}`);
         }
+
+        groupsWithProbability.push({
+          ...groupData,
+          admitProbability: admitProbability || '未知', // 确保不是undefined
+          probability,
+          lastYearMinScore,
+          lastYearMinRank
+        });
       }
 
       // 6. 确定起始位置
@@ -243,26 +309,26 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
       const addedGroups = [];
       const autoFillMajors = params.autoFillMajors !== false;
 
-      for (const groupData of groupsToAdd) {
-        // 添加专业组
+      for (const groupWithProb of groupsWithProbability) {
+        // 添加专业组（使用已计算好的冲稳保和概率）
         const group = await this.volunteerService.addVolunteerGroup({
           batchId: params.batchId,
           groupOrder: currentOrder,
-          collegeCode: groupData.collegeCode,
-          collegeName: groupData.collegeName,
-          groupCode: groupData.groupCode || '',
-          groupName: groupData.groupName || '',
-          subjectRequirement: groupData.subjectRequirement,
+          collegeCode: groupWithProb.collegeCode,
+          collegeName: groupWithProb.collegeName,
+          groupCode: groupWithProb.groupCode || '',
+          groupName: groupWithProb.groupName || '',
+          subjectRequirement: groupWithProb.subjectRequirement,
           isObeyAdjustment: true,  // 默认服从调剂
-          admitProbability,
-          lastYearMinScore,
-          lastYearMinRank
+          admitProbability: groupWithProb.admitProbability,
+          lastYearMinScore: groupWithProb.lastYearMinScore,
+          lastYearMinRank: groupWithProb.lastYearMinRank
         });
 
         // 自动填充专业
-        if (autoFillMajors && groupData.majors.length > 0) {
+        if (autoFillMajors && groupWithProb.majors.length > 0) {
           // 按招生计划数排序,选择前6个
-          const topMajors = groupData.majors
+          const topMajors = groupWithProb.majors
             .sort((a: any, b: any) => (b.planCount || 0) - (a.planCount || 0))
             .slice(0, 6);
 
@@ -284,7 +350,8 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
 
         addedGroups.push({
           ...group,
-          majorCount: autoFillMajors ? Math.min(groupData.majors.length, 6) : 0
+          majorCount: autoFillMajors ? Math.min(groupWithProb.majors.length, 6) : 0,
+          probability: groupWithProb.probability
         });
 
         currentOrder++;
@@ -296,7 +363,6 @@ export class AddCollegeToVolunteersSmartTool extends Tool {
           collegeName,
           addedCount: addedGroups.length,
           groups: addedGroups,
-          admitProbability,
           message: `成功添加${addedGroups.length}个专业组到志愿表`
         },
         metadata: {
@@ -341,6 +407,7 @@ export class AddGroupsBatchTool extends Tool {
   private enrollmentPlanRepository = AppDataSource.getRepository(EnrollmentPlan);
   private admissionScoreRepository = AppDataSource.getRepository(AdmissionScore);
   private batchHelper = new BatchHelper();
+  private probabilityService = new AdmissionProbabilityService();
 
   async execute(
     params: Record<string, any>,
@@ -431,27 +498,79 @@ export class AddGroupsBatchTool extends Tool {
 
           const firstPlan = plans[0];
 
-          // 4. 查询历年录取分数
-          const historicalScores = await this.admissionScoreRepository
+          // 4. 查询历年录取分数并使用统一的AdmissionProbabilityService计算冲稳保
+          const groupHistoricalScores = await this.admissionScoreRepository
             .createQueryBuilder('as')
-            .where('as.collegeName = :collegeName', { collegeName: firstPlan.collegeName })
+            .where('as.collegeCode = :collegeCode', { collegeCode: firstPlan.collegeCode })
+            .andWhere('as.groupCode = :groupCode', { groupCode: groupInput.groupCode })
             .andWhere('as.sourceProvince = :sourceProvince', { sourceProvince: batch.province })
             .andWhere('as.subjectType = :subjectType', { subjectType: batch.subjectType })
             .andWhere('as.year < :year', { year: batch.year })
             .orderBy('as.year', 'DESC')
-            .limit(1)
-            .getOne();
+            .limit(3)
+            .getMany();
 
           let admitProbability = '未知';
-          if (historicalScores && historicalScores.minScore) {
-            const scoreGap = batch.score - historicalScores.minScore;
-            admitProbability = scoreGap < -10 ? '冲' : scoreGap <= 10 ? '稳' : '保';
+          let probability: number | null = null;
+          let lastYearMinScore: number | undefined;
+          let lastYearMinRank: number | undefined;
+
+          // 如果有历史数据且用户有分数和位次，使用完整的概率计算
+          if (groupHistoricalScores.length > 0 && batch.score > 0 && batch.rank && batch.rank > 0) {
+            const groupHistory: GroupHistoricalData[] = groupHistoricalScores.map(score => ({
+              year: score.year,
+              minScore: score.minScore || 0,
+              avgScore: score.avgScore,
+              maxScore: score.maxScore,
+              minRank: score.minRank || 0,
+              maxRank: score.maxRank,
+              planCount: score.planCount || 0
+            }));
+
+            const result = this.probabilityService.calculateForGroup(
+              batch.score,
+              batch.rank,
+              groupHistory
+            );
+
+            probability = result.probability;
+
+            // 使用统一的冲稳保标准
+            if (result.riskLevel === '冲') {
+              admitProbability = '冲';
+            } else if (result.riskLevel === '保') {
+              admitProbability = '保';
+            } else {
+              admitProbability = '稳';
+            }
+
+            lastYearMinScore = groupHistoricalScores[0].minScore || undefined;
+            lastYearMinRank = groupHistoricalScores[0].minRank || undefined;
+
+            console.log(`[AI Tool - 批量添加] ${firstPlan.collegeName} ${groupInput.groupCode}: probability=${probability}%, riskLevel=${result.riskLevel}, scoreGap=${result.scoreGap}`);
+          } else if (groupHistoricalScores.length > 0 && batch.score > 0) {
+            // 如果没有位次，使用简化算法
+            const avgMinScore = groupHistoricalScores.reduce((sum, s) => sum + (s.minScore || 0), 0) / groupHistoricalScores.length;
+            const scoreGap = batch.score - avgMinScore;
+
+            if (scoreGap < -10) {
+              admitProbability = '冲';
+            } else if (scoreGap > 15) {
+              admitProbability = '保';
+            } else {
+              admitProbability = '稳';
+            }
+
+            lastYearMinScore = groupHistoricalScores[0].minScore || undefined;
+            lastYearMinRank = groupHistoricalScores[0].minRank || undefined;
+
+            console.log(`[AI Tool - 批量添加 - 简化算法] ${firstPlan.collegeName} ${groupInput.groupCode}: scoreGap=${scoreGap.toFixed(1)}, category=${admitProbability}`);
           }
 
           // 5. 确定groupOrder（用户提供的优先，否则自动递增）
           const finalGroupOrder = groupInput.groupOrder || currentOrder;
 
-          // 6. 添加专业组
+          // 6. 添加专业组（使用已计算好的冲稳保）
           const group = await this.volunteerService.addVolunteerGroup({
             batchId,
             groupOrder: finalGroupOrder,
@@ -462,8 +581,8 @@ export class AddGroupsBatchTool extends Tool {
             subjectRequirement: firstPlan.subjectRequirements,
             isObeyAdjustment: groupInput.isObeyAdjustment !== false,
             admitProbability,
-            lastYearMinScore: historicalScores?.minScore || undefined,
-            lastYearMinRank: historicalScores?.minRank || undefined
+            lastYearMinScore,
+            lastYearMinRank
           });
 
           // 7. 自动填充专业（按招生计划数排序，取前6个）
@@ -489,7 +608,8 @@ export class AddGroupsBatchTool extends Tool {
           addedGroups.push({
             ...group,
             majorCount: topMajors.length,
-            admitProbability
+            admitProbability: admitProbability || '未知', // 确保不是undefined
+            probability
           });
 
           // 只有在使用自动order时才递增
