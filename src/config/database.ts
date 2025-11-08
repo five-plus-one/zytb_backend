@@ -21,6 +21,7 @@ import { CoreCollege } from '../models/core/CoreCollege';
 import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
 import { CoreMajor } from '../models/core/CoreMajor';
 import { CoreCampusLife } from '../models/core/CoreCampusLife';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
 
 export const AppDataSource = new DataSource({
   ...config.database,
@@ -46,7 +47,8 @@ export const AppDataSource = new DataSource({
     CoreCollege,
     CoreAdmissionScore,
     CoreMajor,
-    CoreCampusLife
+    CoreCampusLife,
+    CoreEnrollmentPlan
   ],
   migrations: [__dirname + '/../migrations/**/*.js']
 });
