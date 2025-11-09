@@ -18,7 +18,7 @@ async function testRecommendationEngine() {
   console.log('   分数: 700分');
   console.log('   位次: 126');
   console.log('   省份: 江苏');
-  console.log('   科类: 物理');
+  console.log('   科类: physics (物理类)');
   console.log('   偏好: 院校>专业>城市 (50:30:20)\n');
 
   const context1 = {
@@ -27,7 +27,7 @@ async function testRecommendationEngine() {
     examScore: 700,
     scoreRank: 126,
     province: '江苏',
-    subjectType: '物理',
+    subjectType: 'physics',  // 使用英文标识符
     preferences: [
       {
         indicatorId: 'CORE_01',
@@ -79,7 +79,7 @@ async function testRecommendationEngine() {
   console.log('\n\n📝 测试场景2: 中分段学生');
   console.log('   分数: 600分');
   console.log('   省份: 江苏');
-  console.log('   科类: 物理');
+  console.log('   科类: physics (物理类)');
   console.log('   偏好: 专业>院校>城市 (50:30:20)\n');
 
   const context2 = {
@@ -87,7 +87,7 @@ async function testRecommendationEngine() {
     sessionId: 'test-session-2',
     examScore: 600,
     province: '江苏',
-    subjectType: '物理',
+    subjectType: 'physics',  // 使用英文标识符
     preferences: [
       {
         indicatorId: 'CORE_01',

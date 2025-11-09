@@ -5,6 +5,7 @@ import { PromptService, ConversationContext } from './prompt.service';
 import { NewRecommendationEngine } from './recommendation_new.service';
 import embeddingRecommendationService from './embedding-recommendation.service';
 import scoreRankingRecommendationService from './score-ranking-recommendation.service';
+import { WeightedRecommendationEngine } from './weighted-recommendation-v2.service';
 import { SearchService } from './search.service';
 import { AgentSession } from '../../models/AgentSession';
 import { AgentMessage } from '../../models/AgentMessage';
@@ -53,6 +54,7 @@ export class AgentService {
   private llmService: LLMService;
   private promptService: PromptService;
   private recommendationEngine: NewRecommendationEngine;
+  private weightedRecommendationEngine: WeightedRecommendationEngine;
   private searchService: SearchService;
 
   // 内存任务存储 (生产环境应使用Redis)
@@ -64,6 +66,7 @@ export class AgentService {
     this.llmService = new LLMService();
     this.promptService = new PromptService();
     this.recommendationEngine = new NewRecommendationEngine();
+    this.weightedRecommendationEngine = new WeightedRecommendationEngine();
     this.searchService = new SearchService();
   }
 
@@ -273,10 +276,10 @@ export class AgentService {
     // 获取用户偏好
     const preferences = await this.preferenceService.getSessionPreferences(sessionId);
 
-    console.log('📊 使用新版分数排名推荐引擎生成志愿推荐...');
+    console.log('📊 使用新版加权推荐引擎 V2 生成志愿推荐...');
 
-    // 调用新版推荐引擎（基于分数排名）
-    const recommendations = await scoreRankingRecommendationService.generateRecommendations(
+    // 调用加权推荐引擎 V2（多维度加权 + 动态排名范围）
+    const recommendations = await this.weightedRecommendationEngine.generateRecommendations(
       {
         userId: session.userId,
         sessionId,

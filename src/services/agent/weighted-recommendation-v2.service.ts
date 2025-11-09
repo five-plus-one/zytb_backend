@@ -4,6 +4,7 @@ import { CoreCollege } from '../../models/core/CoreCollege';
 import { CoreEnrollmentPlan } from '../../models/core/CoreEnrollmentPlan';
 import { CoreAdmissionScore } from '../../models/core/CoreAdmissionScore';
 import { CoreMajor } from '../../models/core/CoreMajor';
+import { getRedisClient } from '../../config/redis';
 
 /**
  * 智能多维度加权推荐引擎 V2
@@ -44,6 +45,11 @@ interface Candidate {
   collegeId: string;
   collegeName: string;
   collegeCode?: string;
+  collegeProvince?: string;
+  collegeCity?: string;
+  collegeIs985?: boolean;
+  collegeIs211?: boolean;
+  collegeIsDoubleFirstClass?: boolean;
   majorGroupCode?: string;
   majorGroupName?: string;
 
@@ -58,6 +64,7 @@ interface Candidate {
   majors: Array<{
     majorName: string;
     majorCode?: string;
+    majorCategory?: string;
     planCount: number;
     tuition?: number;
   }>;
@@ -99,6 +106,9 @@ interface Candidate {
 // ============ 主推荐引擎 ============
 
 export class WeightedRecommendationEngine {
+  private redis = getRedisClient();
+  private readonly CACHE_TTL = 3600; // 1小时缓存
+  private readonly CACHE_KEY_PREFIX = 'rec:v2:';
 
   /**
    * 主入口：生成推荐
@@ -109,6 +119,18 @@ export class WeightedRecommendationEngine {
   ): Promise<Candidate[]> {
     console.log('\n🚀 === 多维度加权推荐引擎 V2 启动 ===');
     console.log(`📊 用户: 分数=${context.examScore}, 位次=${context.scoreRank || '未知'}, 省份=${context.province}`);
+
+    // 尝试从缓存获取推荐结果
+    const cacheKey = this.buildCacheKey(context, targetCount);
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        console.log('✅ 从缓存加载推荐结果');
+        return JSON.parse(cached);
+      }
+    } catch (error) {
+      console.warn('⚠️  Redis缓存读取失败，继续正常流程:', (error as Error).message);
+    }
 
     // Step 1: 提取用户偏好权重
     const weights = this.extractUserWeights(context.preferences);
@@ -138,7 +160,32 @@ export class WeightedRecommendationEngine {
     const balanced = this.balanceRiskDistribution(scoredCandidates, targetCount);
     console.log(`🎯 最终推荐: ${balanced.length} 个 (冲/稳/保平衡)`);
 
+    // 缓存推荐结果
+    try {
+      await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(balanced));
+      console.log(`💾 推荐结果已缓存 (TTL: ${this.CACHE_TTL}s)`);
+    } catch (error) {
+      console.warn('⚠️  Redis缓存写入失败:', (error as Error).message);
+    }
+
     return balanced;
+  }
+
+  /**
+   * 构建缓存键
+   */
+  private buildCacheKey(context: UserContext, targetCount: number): string {
+    // 使用分数、省份、科类、位次作为缓存键
+    // 注意：不包括preferences，因为偏好可能频繁变化
+    const parts = [
+      this.CACHE_KEY_PREFIX,
+      context.province,
+      context.subjectType,
+      Math.floor(context.examScore / 10) * 10, // 10分为一个区间
+      context.scoreRank ? Math.floor(context.scoreRank / 1000) * 1000 : 'norank', // 1000位次为一个区间
+      targetCount
+    ];
+    return parts.join(':');
   }
 
   /**
@@ -296,15 +343,21 @@ export class WeightedRecommendationEngine {
       const firstPlan = groupPlans[0];
 
       // 查询历史录取分数（精确匹配专业组）
-      const scores = await scoreRepo
+      const query = scoreRepo
         .createQueryBuilder('score')
         .where('score.sourceProvince = :province', { province: context.province })
         .andWhere('score.collegeName = :collegeName', { collegeName: firstPlan.collegeName })
         .andWhere('score.subjectType = :subjectType', { subjectType: context.subjectType })
-        .andWhere('score.majorGroup = :majorGroup', { majorGroup: firstPlan.majorGroupCode })
         .andWhere('score.minRank IS NOT NULL')
         .andWhere('score.minRank >= :minRank', { minRank: rankRange.min })
-        .andWhere('score.minRank <= :maxRank', { maxRank: rankRange.max })
+        .andWhere('score.minRank <= :maxRank', { maxRank: rankRange.max });
+
+      // 只有当 majorGroupCode 不为 null 时才添加专业组过滤
+      if (firstPlan.majorGroupCode) {
+        query.andWhere('score.majorGroup = :majorGroup', { majorGroup: firstPlan.majorGroupCode });
+      }
+
+      const scores = await query
         .orderBy('score.year', 'DESC')
         .limit(3)
         .getMany();
@@ -525,6 +578,11 @@ export class WeightedRecommendationEngine {
       collegeId: firstPlan.collegeId,
       collegeName: firstPlan.collegeName,
       collegeCode: firstPlan.collegeCode || undefined,
+      collegeProvince: firstPlan.collegeProvince || undefined,
+      collegeCity: firstPlan.collegeCity || undefined,
+      collegeIs985: firstPlan.collegeIs985 || false,
+      collegeIs211: firstPlan.collegeIs211 || false,
+      collegeIsDoubleFirstClass: firstPlan.collegeIsWorldClass || false,
       majorGroupCode: firstPlan.majorGroupCode || undefined,
       majorGroupName: firstPlan.majorGroupName || undefined,
       province: firstPlan.collegeProvince || undefined,
@@ -534,6 +592,7 @@ export class WeightedRecommendationEngine {
       majors: plans.slice(0, 6).map(p => ({
         majorName: p.majorName || '未知专业',
         majorCode: p.majorCode || undefined,
+        majorCategory: p.majorCategory || undefined,
         planCount: p.planCount,
         tuition: p.tuition || undefined
       })),
@@ -648,16 +707,53 @@ export class WeightedRecommendationEngine {
   // 待续...后续评分方法
   private async batchFetchColleges(collegeIds: string[]): Promise<CoreCollege[]> {
     if (collegeIds.length === 0) return [];
-    const repo = AppDataSource.getRepository(CoreCollege);
-    return await repo.createQueryBuilder('college')
-      .whereInIds(collegeIds)
-      .getMany();
+
+    const colleges: CoreCollege[] = [];
+    const uncachedIds: string[] = [];
+
+    // 先尝试从缓存获取
+    for (const id of collegeIds) {
+      const cacheKey = `college:${id}`;
+      try {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+          colleges.push(JSON.parse(cached));
+        } else {
+          uncachedIds.push(id);
+        }
+      } catch (error) {
+        uncachedIds.push(id);
+      }
+    }
+
+    // 从数据库查询未缓存的院校
+    if (uncachedIds.length > 0) {
+      const repo = AppDataSource.getRepository(CoreCollege);
+      const fetchedColleges = await repo.createQueryBuilder('college')
+        .whereInIds(uncachedIds)
+        .getMany();
+
+      // 缓存新获取的院校数据 (24小时)
+      for (const college of fetchedColleges) {
+        try {
+          await this.redis.setex(`college:${college.id}`, 86400, JSON.stringify(college));
+        } catch (error) {
+          // 缓存失败不影响主流程
+        }
+      }
+
+      colleges.push(...fetchedColleges);
+    }
+
+    return colleges;
   }
 
   private scoreCollege(candidate: Candidate, college: CoreCollege | undefined, context: UserContext): number {
     let score = 50; // 基础分
 
     if (!college) return score;
+
+    const preferences = context.preferences || [];
 
     // 985/211加分
     if (college.is985) score += 25;
@@ -672,19 +768,208 @@ export class WeightedRecommendationEngine {
     // 排名加分
     if (college.rank && college.rank <= 50) {
       score += 10;
+    } else if (college.rank && college.rank <= 100) {
+      score += 5;
+    }
+
+    // CORE_12: 院校类型偏好 (综合/理工/师范/医药等)
+    const collegeTypePref = preferences.find(p => p.indicatorId === 'CORE_12');
+    if (collegeTypePref && collegeTypePref.value && college.type) {
+      const preferredTypes = Array.isArray(collegeTypePref.value) ? collegeTypePref.value : [collegeTypePref.value];
+
+      const typeMatch = preferredTypes.some(type =>
+        college.type && college.type.includes(type)
+      );
+
+      if (typeMatch) {
+        score += 10;
+      }
+    }
+
+    // CORE_14: 院校规模偏好
+    const collegeSizePref = preferences.find(p => p.indicatorId === 'CORE_14');
+    if (collegeSizePref && collegeSizePref.value) {
+      // TODO: 需要在 core_colleges 中添加学校规模字段
+      // 暂时基于是否985/211判断
+    }
+
+    // CORE_16: 保研率重视程度
+    const postgraduateRatePref = preferences.find(p => p.indicatorId === 'CORE_16');
+    if (postgraduateRatePref && postgraduateRatePref.value === 'high' && college.postgraduateRate) {
+      // 如果用户很重视保研率，且学校保研率高，额外加分
+      if (college.postgraduateRate > 20) {
+        score += 10;
+      }
+    }
+
+    // SEC_04: 院校排名范围偏好
+    const rankingPref = preferences.find(p => p.indicatorId === 'SEC_04');
+    if (rankingPref && rankingPref.value && college.rank) {
+      const preferredRange = rankingPref.value; // 如: "前50名", "前100名"
+      if (preferredRange === '前50名' && college.rank <= 50) {
+        score += 12;
+      } else if (preferredRange === '前100名' && college.rank <= 100) {
+        score += 8;
+      }
+    }
+
+    // SEC_10: 男女比例偏好
+    const genderRatioPref = preferences.find(p => p.indicatorId === 'SEC_10');
+    if (genderRatioPref && genderRatioPref.value && college.femaleRatio && college.maleRatio) {
+      const preferredRatio = genderRatioPref.value; // 如: "男女均衡", "偏女生多", "偏男生多"
+
+      const femaleRatio = Number(college.femaleRatio);
+      const maleRatio = Number(college.maleRatio);
+
+      if (preferredRatio === '男女均衡' && Math.abs(femaleRatio - maleRatio) < 15) {
+        score += 5;
+      } else if (preferredRatio === '偏女生多' && femaleRatio > maleRatio + 10) {
+        score += 5;
+      } else if (preferredRatio === '偏男生多' && maleRatio > femaleRatio + 10) {
+        score += 5;
+      }
     }
 
     return Math.min(100, score);
   }
 
   private async scoreMajor(candidate: Candidate, context: UserContext): Promise<number> {
-    // 简化版：后续整合用户专业偏好
-    return 60;
+    let score = 50; // 基础分
+
+    // 获取用户的专业偏好指标
+    const preferences = context.preferences || [];
+    const majorPrefs = preferences.filter(p =>
+      p.indicatorId === 'CORE_09' || // 目标专业类别
+      p.indicatorId === 'CORE_10' || // 具体目标专业
+      p.indicatorId === 'CORE_11' || // 专业选择灵活度
+      p.indicatorId === 'SEC_01' ||  // 专业兴趣领域
+      p.indicatorId === 'SEC_02'     // 专业排斥领域
+    );
+
+    if (majorPrefs.length === 0) return score;
+
+    // CORE_10: 检查是否匹配用户的目标专业
+    const targetMajorPref = majorPrefs.find(p => p.indicatorId === 'CORE_10');
+    if (targetMajorPref && targetMajorPref.value) {
+      const targetMajors = Array.isArray(targetMajorPref.value) ? targetMajorPref.value : [targetMajorPref.value];
+      const candidateMajorNames = candidate.majors.map(m => m.majorName);
+
+      // 完全匹配目标专业
+      const hasExactMatch = targetMajors.some(target =>
+        candidateMajorNames.some(name => name.includes(target) || target.includes(name))
+      );
+
+      if (hasExactMatch) {
+        score += 30; // 大幅加分
+      }
+    }
+
+    // CORE_09: 检查专业类别匹配
+    const majorCategoryPref = majorPrefs.find(p => p.indicatorId === 'CORE_09');
+    if (majorCategoryPref && majorCategoryPref.value) {
+      const preferredCategories = Array.isArray(majorCategoryPref.value) ? majorCategoryPref.value : [majorCategoryPref.value];
+      const candidateMajorCategories = candidate.majors.map(m => m.majorCategory || '');
+
+      const hasCategoryMatch = preferredCategories.some(cat =>
+        candidateMajorCategories.some(candidateCat => candidateCat && candidateCat.includes(cat))
+      );
+
+      if (hasCategoryMatch) {
+        score += 15;
+      }
+    }
+
+    // SEC_02: 检查是否有排斥的专业
+    const avoidMajorPref = majorPrefs.find(p => p.indicatorId === 'SEC_02');
+    if (avoidMajorPref && avoidMajorPref.value) {
+      const avoidMajors = Array.isArray(avoidMajorPref.value) ? avoidMajorPref.value : [avoidMajorPref.value];
+      const candidateMajorNames = candidate.majors.map(m => m.majorName);
+
+      const hasAvoidMatch = avoidMajors.some(avoid =>
+        candidateMajorNames.some(name => name.includes(avoid) || avoid.includes(name))
+      );
+
+      if (hasAvoidMatch) {
+        score -= 40; // 大幅减分
+      }
+    }
+
+    return Math.max(0, Math.min(100, score));
   }
 
   private scoreCity(candidate: Candidate, context: UserContext): number {
-    // 简化版：后续整合用户城市偏好
-    return 50;
+    let score = 50; // 基础分
+
+    const preferences = context.preferences || [];
+
+    // CORE_20: 目标城市偏好
+    const targetCityPref = preferences.find(p => p.indicatorId === 'CORE_20');
+    if (targetCityPref && targetCityPref.value) {
+      const preferredCities = Array.isArray(targetCityPref.value) ? targetCityPref.value : [targetCityPref.value];
+
+      // 完全匹配目标城市
+      const cityMatch = preferredCities.some(city =>
+        candidate.collegeCity && (candidate.collegeCity.includes(city) || city.includes(candidate.collegeCity))
+      );
+
+      if (cityMatch) {
+        score += 35; // 大幅加分
+      }
+    }
+
+    // CORE_21: 目标省份偏好
+    const targetProvincePref = preferences.find(p => p.indicatorId === 'CORE_21');
+    if (targetProvincePref && targetProvincePref.value) {
+      const preferredProvinces = Array.isArray(targetProvincePref.value) ? targetProvincePref.value : [targetProvincePref.value];
+
+      const provinceMatch = preferredProvinces.some(province =>
+        candidate.collegeProvince && (candidate.collegeProvince.includes(province) || province.includes(candidate.collegeProvince))
+      );
+
+      if (provinceMatch) {
+        score += 20;
+      }
+    }
+
+    // SEC_14: 地域偏好（城市规模）
+    const cityScalePref = preferences.find(p => p.indicatorId === 'SEC_14');
+    if (cityScalePref && cityScalePref.value) {
+      const preferredScale = cityScalePref.value; // '一线城市', '新一线', '二线', etc.
+
+      // 简化版：根据已知城市判断规模
+      const tier1Cities = ['北京', '上海', '广州', '深圳'];
+      const newTier1Cities = ['成都', '杭州', '重庆', '武汉', '西安', '苏州', '天津', '南京', '长沙', '郑州', '东莞', '青岛', '沈阳', '宁波', '昆明'];
+
+      if (preferredScale === '一线城市' && candidate.collegeCity && tier1Cities.some(city => candidate.collegeCity!.includes(city))) {
+        score += 15;
+      } else if (preferredScale === '新一线城市' && candidate.collegeCity && newTier1Cities.some(city => candidate.collegeCity!.includes(city))) {
+        score += 15;
+      }
+    }
+
+    // SEC_15: 气候偏好
+    const climatePref = preferences.find(p => p.indicatorId === 'SEC_15');
+    if (climatePref && climatePref.value) {
+      // 这里可以根据省份/城市映射气候类型，简化实现
+      // TODO: 添加城市-气候映射表
+    }
+
+    // SEC_19: 地域排斥
+    const avoidRegionPref = preferences.find(p => p.indicatorId === 'SEC_19');
+    if (avoidRegionPref && avoidRegionPref.value) {
+      const avoidRegions = Array.isArray(avoidRegionPref.value) ? avoidRegionPref.value : [avoidRegionPref.value];
+
+      const hasAvoidMatch = avoidRegions.some(region =>
+        (candidate.collegeProvince && candidate.collegeProvince.includes(region)) ||
+        (candidate.collegeCity && candidate.collegeCity.includes(region))
+      );
+
+      if (hasAvoidMatch) {
+        score -= 50; // 严重减分
+      }
+    }
+
+    return Math.max(0, Math.min(100, score));
   }
 
   private scoreAdmissionProbability(candidate: Candidate, userScore: number, userRank?: number): number {
@@ -702,8 +987,22 @@ export class WeightedRecommendationEngine {
   }
 
   private async scoreEmployment(candidate: Candidate): Promise<number> {
-    // 简化版：后续整合就业数据
-    return 60;
+    let score = 50; // 基础分
+
+    // 根据院校层次提供就业基础分
+    if (candidate.collegeIs985) {
+      score += 20; // 985院校就业优势明显
+    } else if (candidate.collegeIs211) {
+      score += 12;
+    } else if (candidate.collegeIsDoubleFirstClass) {
+      score += 8;
+    }
+
+    // TODO: 后续可以从 core_majors 表中获取专业的就业率数据
+    // TODO: 可以整合 CORE_02 (就业-深造权重) 和 CORE_03 (兴趣-前景权重) 指标
+    // TODO: 可以整合 SEC_06 (目标行业), SEC_07 (目标岗位) 等指标
+
+    return Math.min(100, score);
   }
 
   private scoreCampusLife(candidate: Candidate, college: CoreCollege | undefined): number {
