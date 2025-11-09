@@ -357,9 +357,9 @@ export class SmartRecommendationService {
       let historicalData = await this.admissionScoreRepo
         .createQueryBuilder('as')
         .where('as.collegeCode = :collegeCode', { collegeCode: group.collegeCode })
-        .andWhere('as.groupCode = :groupCode', { groupCode: group.groupCode })
+        .andWhere('as.majorGroupCode = :groupCode', { groupCode: group.groupCode })
         .andWhere('as.sourceProvince = :province', { province: userProfile.province })
-        .andWhere('as.subjectType = :category', { category: userProfile.category })
+        .andWhere('as.subjectType = :category', { category: normalizedCategory })  // 使用转换后的值
         .andWhere('as.year <= :maxYear', { maxYear: 2024 })  // 修改：使用 <= 2024
         .orderBy('as.year', 'DESC')
         .limit(3)
@@ -370,9 +370,9 @@ export class SmartRecommendationService {
         historicalData = await this.admissionScoreRepo
           .createQueryBuilder('as')
           .where('as.collegeCode = :collegeCode', { collegeCode: group.collegeCode })
-          .andWhere('as.groupName LIKE :groupName', { groupName: `%${group.groupName}%` })
+          .andWhere('as.majorGroupName LIKE :groupName', { groupName: `%${group.groupName}%` })
           .andWhere('as.sourceProvince = :province', { province: userProfile.province })
-          .andWhere('as.subjectType = :category', { category: userProfile.category })
+          .andWhere('as.subjectType = :category', { category: normalizedCategory })  // 使用转换后的值
           .andWhere('as.year <= :maxYear', { maxYear: 2024 })
           .orderBy('as.year', 'DESC')
           .limit(3)
@@ -385,7 +385,7 @@ export class SmartRecommendationService {
           .createQueryBuilder('as')
           .where('as.collegeName = :collegeName', { collegeName: group.collegeName })
           .andWhere('as.sourceProvince = :province', { province: userProfile.province })
-          .andWhere('as.subjectType = :category', { category: userProfile.category })
+          .andWhere('as.subjectType = :category', { category: normalizedCategory })  // 使用转换后的值
           .andWhere('as.year <= :maxYear', { maxYear: 2024 })
           .orderBy('as.year', 'DESC')
           .limit(3)
