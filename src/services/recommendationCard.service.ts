@@ -54,11 +54,10 @@ export class RecommendationCardService {
 
     const collegeCodes = [...new Set(parsedIds.map(p => p.collegeCode))];
 
-    // ===== 第一步：批量查询招生计划（使用 group 关联）=====
+    // ===== 第一步：批量查询招生计划 =====
     console.log(`[RecommendationCardService] 查询招生计划...`);
     const enrollmentPlans = await this.enrollmentPlanRepo
       .createQueryBuilder('ep')
-      .leftJoinAndSelect('ep.group', 'epg')
       .where('ep.year = :year', { year: userProfile.year })
       .andWhere('ep.sourceProvince = :province', { province: userProfile.province })
       .andWhere('ep.subjectType = :category', { category: userProfile.category })
@@ -87,7 +86,7 @@ export class RecommendationCardService {
 
       if (!groupMap.has(groupKey)) {
         groupMap.set(groupKey, {
-          collegeCode: plan.collegeCode,
+          collegeCode: plan.collegeCode || '',
           collegeName: plan.collegeName,
           collegeProvince: plan.collegeProvince,
           collegeCity: plan.collegeCity,
@@ -114,24 +113,27 @@ export class RecommendationCardService {
 
     console.log(`[RecommendationCardService] 聚合后共 ${groupMap.size} 个专业组`);
 
-    // ===== 第三步：批量查询历史分数（使用 group_id JOIN）=====
-    console.log(`[RecommendationCardService] 查询历史分数（使用数据库关联）...`);
+    // ===== 第三步：批量查询历史分数（基于 college+group code 匹配）=====
+    console.log(`[RecommendationCardService] 查询历史分数...`);
 
-    // 提取所有需要查询的 group_id
-    const groupIdsToQuery = enrollmentPlans
-      .map(ep => ep.groupId)
-      .filter((id): id is string => id !== null && id !== undefined);
+    // 提取所有需要查询的 college code 和 group code 组合
+    const groupCodesToQuery = enrollmentPlans
+      .map(ep => ({
+        collegeCode: ep.collegeCode,
+        majorGroupCode: ep.majorGroupCode
+      }))
+      .filter((g): g is { collegeCode: string; majorGroupCode: string } =>
+        g.collegeCode !== null && g.collegeCode !== undefined &&
+        g.majorGroupCode !== null && g.majorGroupCode !== undefined
+      );
 
-    const uniqueGroupIds = [...new Set(groupIdsToQuery)];
-    console.log(`[RecommendationCardService] 需要查询 ${uniqueGroupIds.length} 个专业组的历史数据`);
+    console.log(`[RecommendationCardService] 需要查询 ${groupCodesToQuery.length} 个专业组的历史数据`);
 
-    // 使用 group_id 直接 JOIN 查询，避免字符串匹配
-    const historicalScores = uniqueGroupIds.length > 0
+    // 查询历史分数
+    const historicalScores = groupCodesToQuery.length > 0
       ? await this.admissionScoreRepo
           .createQueryBuilder('as')
-          .leftJoinAndSelect('as.group', 'asg')
-          .where('as.groupId IN (:...groupIds)', { groupIds: uniqueGroupIds })
-          .andWhere('as.sourceProvince = :province', { province: userProfile.province })
+          .where('as.sourceProvince = :province', { province: userProfile.province })
           .andWhere('as.subjectType = :category', { category: userProfile.category })
           .andWhere('as.year < :currentYear', { currentYear: userProfile.year })
           .andWhere('as.year >= :minYear', { minYear: userProfile.year - 4 }) // 只查最近4年
@@ -141,17 +143,13 @@ export class RecommendationCardService {
 
     console.log(`[RecommendationCardService] 查询到 ${historicalScores.length} 条历史分数`);
 
-    // 按专业组聚合历史分数（使用 groupId，不需要字符串匹配）
+    // 按专业组聚合历史分数（使用 collegeCode + majorGroupCode 匹配）
     const historyMap = new Map<string, GroupHistoricalData[]>();
 
     for (const score of historicalScores) {
-      if (!score.groupId) continue;
+      if (!score.collegeCode || !score.majorGroupCode) continue;
 
-      // 找到对应的专业组
-      const matchingPlan = enrollmentPlans.find(ep => ep.groupId === score.groupId);
-      if (!matchingPlan) continue;
-
-      const groupKey = `${matchingPlan.collegeCode}_${matchingPlan.majorGroupCode || ''}`;
+      const groupKey = `${score.collegeCode}_${score.majorGroupCode}`;
 
       if (!historyMap.has(groupKey)) {
         historyMap.set(groupKey, []);

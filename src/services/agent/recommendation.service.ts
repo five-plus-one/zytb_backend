@@ -715,10 +715,11 @@ export class RecommendationEngine {
     const unmatchedMajors: string[] = [];
 
     for (const plan of majorsInGroup) {
-      if (targetMajors.includes(plan.majorName)) {
-        matchedMajors.push(plan.majorName);
+      const majorName = plan.majorName || '';
+      if (targetMajors.includes(majorName)) {
+        matchedMajors.push(majorName);
       } else {
-        unmatchedMajors.push(plan.majorName);
+        unmatchedMajors.push(majorName);
       }
     }
 
