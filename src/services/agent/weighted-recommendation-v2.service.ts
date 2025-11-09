@@ -144,6 +144,18 @@ export class WeightedRecommendationEngine {
     const weights = this.extractUserWeights(context.preferences);
     console.log(`⚖️  用户权重: 院校=${weights.college}%, 专业=${weights.major}%, 城市=${weights.city}%`);
 
+    // Step 1.5: 提取用户偏好过滤条件
+    const filters = this.extractUserPreferenceFilters(context.preferences);
+    if (filters.targetRegions && filters.targetRegions.length > 0) {
+      console.log(`🎯 目标地域: ${filters.targetRegions.join(', ')}`);
+    }
+    if (filters.targetMajors && filters.targetMajors.length > 0) {
+      console.log(`🎯 目标专业: ${filters.targetMajors.join(', ')}`);
+    }
+    if (filters.targetColleges && filters.targetColleges.length > 0) {
+      console.log(`🎯 目标院校: ${filters.targetColleges.join(', ')}`);
+    }
+
     // Step 2: 计算用户位次（如果没有）
     let userRank = context.scoreRank;
     if (!userRank) {
@@ -152,7 +164,7 @@ export class WeightedRecommendationEngine {
     }
 
     // Step 3: 多级候选池扩展
-    const candidates = await this.buildCandidatePool(context, userRank);
+    const candidates = await this.buildCandidatePool(context, userRank, filters);
     console.log(`📦 候选池大小: ${candidates.length}`);
 
     if (candidates.length === 0) {
@@ -410,8 +422,12 @@ export class WeightedRecommendationEngine {
       .createQueryBuilder('plan')
       .where('plan.sourceProvince = :province', { province: context.province })
       .andWhere('plan.subjectType LIKE :subjectType', { subjectType: `%${context.subjectType}%` })
-      .andWhere('plan.year >= :year', { year: new Date().getFullYear() - 1 })
-      .getMany();
+      .andWhere('plan.year >= :year', { year: new Date().getFullYear() - 1 });
+
+    // 应用偏好过滤
+    this.applyPreferenceFilters(planQuery, filters);
+
+    const plans = await planQuery.getMany();
 
     if (plans.length === 0) {
       return [];
@@ -488,17 +504,20 @@ export class WeightedRecommendationEngine {
    */
   private async fetchCandidatesLevel2(
     context: UserContext,
-    userRank: number
+    userRank: number,
+    filters: UserPreferenceFilters
   ): Promise<Candidate[]> {
     const rankRange = this.calculateDynamicRankRange(userRank, context.examScore);
     const planRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
     const scoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
 
-    const plans = await planRepo
+    const planQuery = planRepo
       .createQueryBuilder('plan')
       .where('plan.sourceProvince = :province', { province: context.province })
-      .andWhere('plan.subjectType LIKE :subjectType', { subjectType: `%${context.subjectType}%` })
-      .getMany();
+      .andWhere('plan.subjectType LIKE :subjectType', { subjectType: `%${context.subjectType}%` });
+
+    this.applyPreferenceFilters(planQuery, filters);
+    const plans = await planQuery.getMany();
 
     const candidates: Candidate[] = [];
     const grouped = this.groupPlansByCollegeMajorGroup(plans);
@@ -530,16 +549,18 @@ export class WeightedRecommendationEngine {
   /**
    * Level 3: 分数匹配 - 处理位次缺失情况
    */
-  private async fetchCandidatesLevel3(context: UserContext): Promise<Candidate[]> {
+  private async fetchCandidatesLevel3(context: UserContext, filters: UserPreferenceFilters): Promise<Candidate[]> {
     const scoreRange = this.calculateScoreRange(context.examScore);
     const planRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
     const scoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
 
-    const plans = await planRepo
+    const planQuery = planRepo
       .createQueryBuilder('plan')
       .where('plan.sourceProvince = :province', { province: context.province })
-      .andWhere('plan.subjectType LIKE :subjectType', { subjectType: `%${context.subjectType}%` })
-      .getMany();
+      .andWhere('plan.subjectType LIKE :subjectType', { subjectType: `%${context.subjectType}%` });
+
+    this.applyPreferenceFilters(planQuery, filters);
+    const plans = await planQuery.getMany();
 
     const candidates: Candidate[] = [];
     const grouped = this.groupPlansByCollegeMajorGroup(plans);
@@ -573,7 +594,8 @@ export class WeightedRecommendationEngine {
    */
   private async fetchCandidatesLevel4(
     context: UserContext,
-    userRank: number
+    userRank: number,
+    filters: UserPreferenceFilters
   ): Promise<Candidate[]> {
     // 扩大到3倍范围
     const wideRange = {
@@ -599,12 +621,13 @@ export class WeightedRecommendationEngine {
     const planRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
 
     for (const score of scores) {
-      const plans = await planRepo
+      const planQuery = planRepo
         .createQueryBuilder('plan')
         .where('plan.sourceProvince = :province', { province: context.province })
-        .andWhere('plan.collegeName = :collegeName', { collegeName: score.collegeName })
-        .limit(6)
-        .getMany();
+        .andWhere('plan.collegeName = :collegeName', { collegeName: score.collegeName });
+
+      this.applyPreferenceFilters(planQuery, filters);
+      const plans = await planQuery.limit(6).getMany();
 
       if (plans.length > 0) {
         candidates.push(this.buildCandidate(plans, score, 'fallback'));
@@ -1142,9 +1165,17 @@ export class WeightedRecommendationEngine {
   }
 
   private balanceRiskDistribution(candidates: Candidate[], targetCount: number): Candidate[] {
-    const high = candidates.filter(c => c.riskLevel === 'high').slice(0, Math.floor(targetCount * 0.3));
-    const medium = candidates.filter(c => c.riskLevel === 'medium').slice(0, Math.floor(targetCount * 0.4));
-    const low = candidates.filter(c => c.riskLevel === 'low').slice(0, Math.floor(targetCount * 0.3));
+    const highAll = candidates.filter(c => c.riskLevel === 'high');
+    const mediumAll = candidates.filter(c => c.riskLevel === 'medium');
+    const lowAll = candidates.filter(c => c.riskLevel === 'low');
+
+    console.log(`   ⚖️  风险分布统计: 冲=${highAll.length}, 稳=${mediumAll.length}, 保=${lowAll.length}`);
+
+    const high = highAll.slice(0, Math.floor(targetCount * 0.3));
+    const medium = mediumAll.slice(0, Math.floor(targetCount * 0.4));
+    const low = lowAll.slice(0, Math.floor(targetCount * 0.3));
+
+    console.log(`   🎯 按比例选取: 冲=${high.length}/${Math.floor(targetCount * 0.3)}, 稳=${medium.length}/${Math.floor(targetCount * 0.4)}, 保=${low.length}/${Math.floor(targetCount * 0.3)}`);
 
     return [...high, ...medium, ...low].slice(0, targetCount);
   }
