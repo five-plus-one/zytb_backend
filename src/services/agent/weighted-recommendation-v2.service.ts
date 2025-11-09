@@ -241,6 +241,79 @@ export class WeightedRecommendationEngine {
   }
 
   /**
+   * 提取用户偏好过滤条件（目标地域、专业等）
+   */
+  private extractUserPreferenceFilters(preferences: AgentPreference[]): UserPreferenceFilters {
+    const filters: UserPreferenceFilters = {};
+
+    for (const pref of preferences) {
+      try {
+        if (pref.indicatorId === 'SEC_08') {
+          // 目标地域（省份或城市）
+          const value = typeof pref.value === 'string' ? JSON.parse(pref.value) : pref.value;
+          if (Array.isArray(value)) {
+            filters.targetRegions = value;
+          } else if (typeof value === 'string') {
+            filters.targetRegions = [value];
+          }
+        } else if (pref.indicatorId === 'SEC_09') {
+          // 目标专业
+          const value = typeof pref.value === 'string' ? JSON.parse(pref.value) : pref.value;
+          if (Array.isArray(value)) {
+            filters.targetMajors = value;
+          } else if (typeof value === 'string') {
+            filters.targetMajors = [value];
+          }
+        } else if (pref.indicatorId === 'SEC_05') {
+          // 目标院校
+          const value = typeof pref.value === 'string' ? JSON.parse(pref.value) : pref.value;
+          if (Array.isArray(value)) {
+            filters.targetColleges = value;
+          } else if (typeof value === 'string') {
+            filters.targetColleges = [value];
+          }
+        }
+      } catch (e) {
+        console.warn(`解析偏好 ${pref.indicatorId} 失败:`, e);
+      }
+    }
+
+    return filters;
+  }
+
+  /**
+   * 应用用户偏好过滤到招生计划查询
+   */
+  private applyPreferenceFilters(
+    query: any,
+    filters: UserPreferenceFilters
+  ): void {
+    // 应用地域过滤
+    if (filters.targetRegions && filters.targetRegions.length > 0) {
+      query.andWhere(
+        '(plan.collegeProvince IN (:...regions) OR plan.collegeCity IN (:...regions))',
+        { regions: filters.targetRegions }
+      );
+    }
+
+    // 应用专业过滤
+    if (filters.targetMajors && filters.targetMajors.length > 0) {
+      const majorConditions = filters.targetMajors.map((major, idx) =>
+        `(plan.majorName LIKE :major${idx} OR plan.majorGroupName LIKE :major${idx})`
+      ).join(' OR ');
+      query.andWhere(`(${majorConditions})`);
+      filters.targetMajors.forEach((major, idx) => {
+        query.setParameter(`major${idx}`, `%${major}%`);
+      });
+    }
+
+    // 应用院校过滤
+    if (filters.targetColleges && filters.targetColleges.length > 0) {
+      query.andWhere('plan.collegeName IN (:...colleges)', { colleges: filters.targetColleges });
+    }
+  }
+
+  /**
    * 计算用户位次
    */
   private async calculateUserRank(score: number, province: string, subjectType: string): Promise<number> {
