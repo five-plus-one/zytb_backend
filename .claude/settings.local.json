@@ -5,7 +5,9 @@
       "Bash(npm run build:*)",
       "Bash(cat:*)",
       "Bash(curl:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(cd e:\\\\5plus1\\\\DEV\\\\zytb\\\\zy_backend && npx ts-node:*)",
+      "Bash(npx ts-node:*)"
     ],
     "deny": [],
     "ask": []

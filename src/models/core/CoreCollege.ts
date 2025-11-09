@@ -101,6 +101,13 @@ export class CoreCollege {
   @Column({ type: 'int', nullable: true, name: 'academician_count' })
   academicianCount?: number;
 
+  // 男女比例
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'female_ratio' })
+  femaleRatio?: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, name: 'male_ratio' })
+  maleRatio?: number;
+
   // 联系信息
   @Column({ length: 100, nullable: true, name: 'admission_phone' })
   admissionPhone?: string;
