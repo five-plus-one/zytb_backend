@@ -370,7 +370,7 @@ export class WeightedRecommendationEngine {
     let candidates: Candidate[] = [];
 
     // Level 1: 精确匹配（位次 ± 动态范围）
-    candidates = await this.fetchCandidatesLevel1(context, userRank);
+    candidates = await this.fetchCandidatesLevel1(context, userRank, filters);
     console.log(`  Level 1 (精确匹配): ${candidates.length} 个候选`);
 
     if (candidates.length >= 30) {
