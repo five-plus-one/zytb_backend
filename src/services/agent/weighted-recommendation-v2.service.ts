@@ -40,6 +40,14 @@ interface UserWeights {
   prospect: number;     // 前景权重 0-100
 }
 
+interface UserPreferenceFilters {
+  targetRegions?: string[];  // 目标地域 (SEC_08)
+  targetMajors?: string[];   // 目标专业 (SEC_09)
+  targetColleges?: string[]; // 目标院校 (SEC_05)
+  avoidRegions?: string[];   // 排除地域
+  avoidMajors?: string[];    // 排除专业
+}
+
 interface Candidate {
   // 基础信息
   collegeId: string;
