@@ -283,7 +283,7 @@ export class AdmissionProbabilityService {
       };
     }
 
-    if (scoreGap > 25) {
+    if (scoreGap > 35) {
       return {
         probability: Math.round(finalProbability),
         riskLevel: '保',
@@ -292,7 +292,7 @@ export class AdmissionProbabilityService {
         rankGap: rankGap ? Math.round(rankGap) : null,
         confidence: Math.round(confidence),
         filtered: true,
-        filterReason: '分数差距过大（高于历史平均分25分以上），过于稳妥，浪费志愿位'
+        filterReason: '分数差距过大（高于历史平均分35分以上），过于稳妥，浪费志愿位'
       };
     }
 
