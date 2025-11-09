@@ -350,7 +350,8 @@ export class WeightedRecommendationEngine {
    */
   private async buildCandidatePool(
     context: UserContext,
-    userRank: number
+    userRank: number,
+    filters: UserPreferenceFilters
   ): Promise<Candidate[]> {
     console.log('\n🔍 === 构建候选池（多级扩展）===');
 
@@ -365,7 +366,7 @@ export class WeightedRecommendationEngine {
     }
 
     // Level 2: 模糊匹配（忽略专业组精确匹配）
-    const level2 = await this.fetchCandidatesLevel2(context, userRank);
+    const level2 = await this.fetchCandidatesLevel2(context, userRank, filters);
     candidates = this.mergeCandidates(candidates, level2);
     console.log(`  Level 2 (模糊匹配): ${candidates.length} 个候选`);
 
@@ -374,7 +375,7 @@ export class WeightedRecommendationEngine {
     }
 
     // Level 3: 分数匹配（处理位次缺失情况）
-    const level3 = await this.fetchCandidatesLevel3(context);
+    const level3 = await this.fetchCandidatesLevel3(context, filters);
     candidates = this.mergeCandidates(candidates, level3);
     console.log(`  Level 3 (分数匹配): ${candidates.length} 个候选`);
 
@@ -383,7 +384,7 @@ export class WeightedRecommendationEngine {
     }
 
     // Level 4: 宽松匹配（扩大范围）
-    const level4 = await this.fetchCandidatesLevel4(context, userRank);
+    const level4 = await this.fetchCandidatesLevel4(context, userRank, filters);
     candidates = this.mergeCandidates(candidates, level4);
     console.log(`  Level 4 (宽松匹配): ${candidates.length} 个候选`);
 
@@ -395,7 +396,8 @@ export class WeightedRecommendationEngine {
    */
   private async fetchCandidatesLevel1(
     context: UserContext,
-    userRank: number
+    userRank: number,
+    filters: UserPreferenceFilters
   ): Promise<Candidate[]> {
     // 动态计算位次区间（根据分数段调整）
     const rankRange = this.calculateDynamicRankRange(userRank, context.examScore);
@@ -403,8 +405,8 @@ export class WeightedRecommendationEngine {
     const planRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
     const scoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
 
-    // 查询招生计划
-    const plans = await planRepo
+    // 查询招生计划 - 应用用户偏好过滤
+    const planQuery = planRepo
       .createQueryBuilder('plan')
       .where('plan.sourceProvince = :province', { province: context.province })
       .andWhere('plan.subjectType LIKE :subjectType', { subjectType: `%${context.subjectType}%` })
