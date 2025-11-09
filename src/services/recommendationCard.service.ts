@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
 import { EnrollmentPlanGroup } from '../models/EnrollmentPlanGroup';
 import { AdmissionProbabilityService, GroupHistoricalData } from './admissionProbability.service';
 import { StructuredGroupRecommendation, YearlyAdmissionData, MajorInfo } from '../types/structuredRecommendation';
@@ -18,8 +18,8 @@ import { In } from 'typeorm';
  * - 查询速度从3-5秒提升到<1秒
  */
 export class RecommendationCardService {
-  private enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
-  private admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
+  private enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
   private groupRepo = AppDataSource.getRepository(EnrollmentPlanGroup);
   private probabilityService = new AdmissionProbabilityService();
 
