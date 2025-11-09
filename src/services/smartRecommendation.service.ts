@@ -146,6 +146,62 @@ export class SmartRecommendationService {
   }
 
   /**
+   * 智能匹配专业名称
+   *
+   * 功能：将用户提供的模糊专业关键词转换为数据库中精确的专业名称列表
+   *
+   * @param keywords 用户提供的专业关键词（可能来自 majors 或 majorCategories）
+   * @param userProfile 用户档案（用于限定查询范围）
+   * @returns 数据库中精确匹配的专业名称列表
+   *
+   * @example
+   * 输入: ['自动化类']
+   * 输出: ['自动化', '电气工程及其自动化', '机械设计制造及其自动化', ...]
+   */
+  private async matchMajorNames(
+    keywords: string[],
+    userProfile: { province: string; year: number }
+  ): Promise<string[]> {
+
+    if (!keywords || keywords.length === 0) {
+      return [];
+    }
+
+    const matchedMajors: Set<string> = new Set();
+
+    for (const keyword of keywords) {
+      // 去除"类"后缀（如果有）
+      // "自动化类" → "自动化"
+      // "计算机类" → "计算机"
+      const cleanKeyword = keyword.replace(/类$/, '');
+
+      console.log(`[SmartRecommendation] 模糊搜索专业: "${keyword}" → "${cleanKeyword}"`);
+
+      // 模糊搜索数据库中的专业名
+      // 同时匹配 major_name 和 major_category 字段
+      const result = await this.enrollmentPlanRepo
+        .createQueryBuilder('ep')
+        .select('DISTINCT ep.majorName', 'majorName')
+        .where('ep.sourceProvince = :province', { province: userProfile.province })
+        .andWhere('ep.year = :year', { year: userProfile.year })
+        .andWhere('(ep.majorName LIKE :keyword OR ep.majorCategory LIKE :keyword)', {
+          keyword: `%${cleanKeyword}%`
+        })
+        .getRawMany();
+
+      console.log(`[SmartRecommendation] "${cleanKeyword}" 匹配到 ${result.length} 个专业`);
+
+      result.forEach(r => {
+        if (r.majorName) {
+          matchedMajors.add(r.majorName);
+        }
+      });
+    }
+
+    return Array.from(matchedMajors);
+  }
+
+  /**
    * 查询所有符合条件的专业组（带历史数据）
    */
   private async queryGroupsWithHistory(
@@ -159,16 +215,38 @@ export class SmartRecommendationService {
     preferences: UserPreferences
   ): Promise<Array<GroupRecommendation & { historicalData: GroupHistoricalData[]; scoreVolatility?: number; popularityIndex?: number }>> {
 
-    // ⚠️ 重要：容错处理 - 确保科类格式正确
-    // 数据库中存储的是"物理类"、"历史类"，但用户可能传入"物理"、"历史"
+    // ⚠️ 重要：科类格式转换
+    // 用户传入的可能是"物理类"、"历史类"或"物理"、"历史"
+    // 数据库中存储的是"physics"、"history"
     let normalizedCategory = userProfile.category;
-    if (normalizedCategory === '物理') {
-      normalizedCategory = '物理类';
-    } else if (normalizedCategory === '历史') {
-      normalizedCategory = '历史类';
+    if (normalizedCategory === '物理' || normalizedCategory === '物理类') {
+      normalizedCategory = 'physics';
+    } else if (normalizedCategory === '历史' || normalizedCategory === '历史类') {
+      normalizedCategory = 'history';
     }
 
     console.log(`[SmartRecommendation] 查询参数: 年份=${userProfile.year}, 省份=${userProfile.province}, 科类=${normalizedCategory} (原始值: ${userProfile.category})`);
+
+    // === 智能匹配专业名称 ===
+    let exactMajorNames: string[] = [];
+
+    // 合并 majors 和 majorCategories
+    const allMajorKeywords = [
+      ...(preferences.majors || []),
+      ...(preferences.majorCategories || [])
+    ];
+
+    if (allMajorKeywords.length > 0) {
+      console.log(`[SmartRecommendation] 原始专业关键词:`, allMajorKeywords);
+
+      // 调用智能匹配，得到精确专业名
+      exactMajorNames = await this.matchMajorNames(allMajorKeywords, {
+        province: userProfile.province,
+        year: userProfile.year
+      });
+
+      console.log(`[SmartRecommendation] 匹配到 ${exactMajorNames.length} 个精确专业:`, exactMajorNames.slice(0, 10), exactMajorNames.length > 10 ? '...' : '');
+    }
 
     // 构建查询
     let queryBuilder = this.enrollmentPlanRepo
@@ -177,22 +255,9 @@ export class SmartRecommendationService {
       .andWhere('ep.sourceProvince = :province', { province: userProfile.province })
       .andWhere('ep.subjectType = :category', { category: normalizedCategory });
 
-    // 应用专业偏好筛选
-    if (preferences.majors && preferences.majors.length > 0) {
-      const majorConditions = preferences.majors.map((_, idx) => `ep.majorName LIKE :major${idx}`).join(' OR ');
-      queryBuilder.andWhere(`(${majorConditions})`);
-      preferences.majors.forEach((major, idx) => {
-        queryBuilder.setParameter(`major${idx}`, `%${major}%`);
-      });
-    }
-
-    // 应用专业大类筛选
-    if (preferences.majorCategories && preferences.majorCategories.length > 0) {
-      const categoryConditions = preferences.majorCategories.map((_, idx) => `ep.majorName LIKE :category${idx}`).join(' OR ');
-      queryBuilder.andWhere(`(${categoryConditions})`);
-      preferences.majorCategories.forEach((category, idx) => {
-        queryBuilder.setParameter(`category${idx}`, `%${category}%`);
-      });
+    // 应用专业偏好筛选（使用智能匹配的精确专业名）
+    if (exactMajorNames.length > 0) {
+      queryBuilder.andWhere('ep.majorName IN (:...exactMajors)', { exactMajors: exactMajorNames });
     }
 
     // 应用地区筛选
