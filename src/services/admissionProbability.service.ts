@@ -270,7 +270,7 @@ export class AdmissionProbabilityService {
     // ===== 第十一步：预过滤不合理的推荐 =====
 
     // 11.1 分数差过大或过小（浪费志愿位）
-    if (scoreGap < -20) {
+    if (scoreGap < -30) {
       return {
         probability: Math.round(finalProbability),
         riskLevel: '冲',
@@ -279,11 +279,11 @@ export class AdmissionProbabilityService {
         rankGap: rankGap ? Math.round(rankGap) : null,
         confidence: Math.round(confidence),
         filtered: true,
-        filterReason: '分数差距过大（低于历史平均分20分以上），冲刺意义不大'
+        filterReason: '分数差距过大（低于历史平均分30分以上），冲刺意义不大'
       };
     }
 
-    if (scoreGap > 15) {
+    if (scoreGap > 25) {
       return {
         probability: Math.round(finalProbability),
         riskLevel: '保',
@@ -292,7 +292,7 @@ export class AdmissionProbabilityService {
         rankGap: rankGap ? Math.round(rankGap) : null,
         confidence: Math.round(confidence),
         filtered: true,
-        filterReason: '分数差距过大（高于历史平均分15分以上），过于稳妥，浪费志愿位'
+        filterReason: '分数差距过大（高于历史平均分25分以上），过于稳妥，浪费志愿位'
       };
     }
 
@@ -307,20 +307,6 @@ export class AdmissionProbabilityService {
         confidence: Math.round(confidence),
         filtered: true,
         filterReason: '录取概率极低且分数差距大，冲刺风险极高'
-      };
-    }
-
-    // 11.3 概率过高（几乎保证录取，浪费志愿位）
-    if (finalProbability > 99) {
-      return {
-        probability: Math.round(finalProbability),
-        riskLevel: '保',
-        adjustmentRisk: '低',
-        scoreGap: Math.round(scoreGap * 10) / 10,
-        rankGap: rankGap ? Math.round(rankGap) : null,
-        confidence: Math.round(confidence),
-        filtered: true,
-        filterReason: '录取概率接近100%，过于保守，浪费志愿位'
       };
     }
 

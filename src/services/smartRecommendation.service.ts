@@ -1,6 +1,6 @@
 import { AppDataSource } from '../config/database';
-import { EnrollmentPlan } from '../models/EnrollmentPlan';
-import { AdmissionScore } from '../models/AdmissionScore';
+import { CoreEnrollmentPlan } from '../models/core/CoreEnrollmentPlan';
+import { CoreAdmissionScore } from '../models/core/CoreAdmissionScore';
 import { ScoreRanking } from '../models/ScoreRanking';
 import { AdmissionProbabilityService, GroupHistoricalData } from './admissionProbability.service';
 import {
@@ -22,8 +22,8 @@ import {
  * 5. 返回Top 40个专业组推荐
  */
 export class SmartRecommendationService {
-  private enrollmentPlanRepo = AppDataSource.getRepository(EnrollmentPlan);
-  private admissionScoreRepo = AppDataSource.getRepository(AdmissionScore);
+  private enrollmentPlanRepo = AppDataSource.getRepository(CoreEnrollmentPlan);
+  private admissionScoreRepo = AppDataSource.getRepository(CoreAdmissionScore);
   private scoreRankingRepo = AppDataSource.getRepository(ScoreRanking);
   private probabilityService = new AdmissionProbabilityService();
 
@@ -41,6 +41,23 @@ export class SmartRecommendationService {
     preferences: UserPreferences = {}
   ): Promise<SmartRecommendationResult> {
 
+    console.log(`[SmartRecommendation] ===== 开始推荐 =====`);
+    console.log(`[SmartRecommendation] 用户档案:`, {
+      score: userProfile.score,
+      rank: userProfile.rank,
+      province: userProfile.province,
+      category: userProfile.category,
+      year: userProfile.year
+    });
+    console.log(`[SmartRecommendation] 应用偏好:`, {
+      locations: preferences.locations || '无',
+      majors: preferences.majors || '无',
+      majorCategories: preferences.majorCategories || '无',
+      collegeTypes: preferences.collegeTypes || '无',
+      maxTuition: preferences.maxTuition || '无限制',
+      acceptCooperation: preferences.acceptCooperation !== false ? '是' : '否'
+    });
+
     // 第一步：查询所有符合条件的专业组（带历史数据）
     const groupsWithHistory = await this.queryGroupsWithHistory(userProfile, preferences);
 
@@ -53,8 +70,7 @@ export class SmartRecommendationService {
         userProfile.rank,
         group.historicalData,
         {
-          scoreVolatility: group.scoreVolatility,
-          popularityIndex: group.popularityIndex
+          scoreVolatility: group.scoreVolatility
         }
       );
 
@@ -82,10 +98,20 @@ export class SmartRecommendationService {
 
     // 过滤掉不合理的推荐
     const validGroups = groupsWithProbability.filter(g => !g.filtered);
-    const filteredCount = groupsWithProbability.length - validGroups.length;
+    const filteredGroups = groupsWithProbability.filter(g => g.filtered);
+    const filteredCount = filteredGroups.length;
 
     if (filteredCount > 0) {
       console.log(`[SmartRecommendation] 已过滤 ${filteredCount} 个不合理的推荐`);
+
+      // 统计过滤原因
+      const filterReasonStats = filteredGroups.reduce((acc, g) => {
+        const reason = g.filterReason || '未知原因';
+        acc[reason] = (acc[reason] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      console.log(`[SmartRecommendation] 过滤原因统计:`, filterReasonStats);
     }
 
     console.log(`[SmartRecommendation] 计算完成，有效专业组 ${validGroups.length} 个，开始分类`);
@@ -230,15 +256,15 @@ export class SmartRecommendationService {
 
       if (!groupMap.has(groupKey)) {
         groupMap.set(groupKey, {
-          collegeCode: plan.collegeCode,
+          collegeCode: plan.collegeCode || '',
           collegeName: plan.collegeName,
-          collegeProvince: plan.collegeProvince,
-          collegeCity: plan.collegeCity,
+          collegeProvince: plan.collegeProvince || '',
+          collegeCity: plan.collegeCity || '',
           is985: plan.collegeIs985,
           is211: plan.collegeIs211,
           isDoubleFirstClass: plan.collegeIsWorldClass,
           groupCode: plan.majorGroupCode || '',
-          groupName: plan.majorGroupName,
+          groupName: plan.majorGroupName || '',
           subjectRequirements: plan.subjectRequirements,
           majors: []
         });
@@ -246,8 +272,8 @@ export class SmartRecommendationService {
 
       const group = groupMap.get(groupKey)!;
       group.majors.push({
-        majorCode: plan.majorCode,
-        majorName: plan.majorName,
+        majorCode: plan.majorCode || '',
+        majorName: plan.majorName || '',
         planCount: plan.planCount,
         tuition: plan.tuition ? Number(plan.tuition) : undefined,
         studyYears: plan.studyYears,
@@ -331,7 +357,6 @@ export class SmartRecommendationService {
         historicalData: history,
         historicalScores: history,
         scoreVolatility: historicalData[0]?.scoreVolatility ? Number(historicalData[0].scoreVolatility) : undefined,
-        popularityIndex: historicalData[0]?.popularityIndex,
 
         // 这些字段会在后续步骤中填充
         probability: 0,
