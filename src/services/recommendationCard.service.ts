@@ -46,6 +46,15 @@ export class RecommendationCardService {
 
     console.log(`[RecommendationCardService] 批量获取 ${groupIds.length} 个卡片数据`);
 
+    // === 转换科类参数（数据库中存储的是 physics/history）===
+    let normalizedCategory = userProfile.category;
+    if (normalizedCategory === '物理' || normalizedCategory === '物理类') {
+      normalizedCategory = 'physics';
+    } else if (normalizedCategory === '历史' || normalizedCategory === '历史类') {
+      normalizedCategory = 'history';
+    }
+    console.log(`[RecommendationCardService] 科类转换: ${userProfile.category} → ${normalizedCategory}`);
+
     // 解析ID获取 collegeCode 和 groupCode
     const parsedIds = groupIds.map(id => {
       const [collegeCode, groupCode] = id.split('_');
@@ -60,7 +69,7 @@ export class RecommendationCardService {
       .createQueryBuilder('ep')
       .where('ep.year = :year', { year: userProfile.year })
       .andWhere('ep.sourceProvince = :province', { province: userProfile.province })
-      .andWhere('ep.subjectType = :category', { category: userProfile.category })
+      .andWhere('ep.subjectType = :category', { category: normalizedCategory })
       .andWhere('ep.collegeCode IN (:...collegeCodes)', { collegeCodes })
       .getMany();
 
@@ -134,7 +143,7 @@ export class RecommendationCardService {
       ? await this.admissionScoreRepo
           .createQueryBuilder('as')
           .where('as.sourceProvince = :province', { province: userProfile.province })
-          .andWhere('as.subjectType = :category', { category: userProfile.category })
+          .andWhere('as.subjectType = :category', { category: normalizedCategory })
           .andWhere('as.year < :currentYear', { currentYear: userProfile.year })
           .andWhere('as.year >= :minYear', { minYear: userProfile.year - 4 }) // 只查最近4年
           .orderBy('as.year', 'DESC')
